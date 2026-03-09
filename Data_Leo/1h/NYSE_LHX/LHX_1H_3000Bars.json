@@ -1,0 +1,8 @@
+{
+  "meta": {
+    "symbol": "NYSE:LHX",
+    "timeframe": "1H",
+    "candles": 3000
+  },
+  "data": {}
+}

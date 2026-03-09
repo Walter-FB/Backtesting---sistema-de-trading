@@ -1,0 +1,526 @@
+=================================================================
+  BACKTEST REPORT ACUMULADO — ema_crossover
+  Generado : 2026-03-09 17:21:58
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+ 166,269.91
+  Retorno total      : +     12.79%
+  Max Drawdown       :       38.05%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        258
+  Ganadores          :        101
+  Perdedores         :        157
+  Win Rate           :       39.1%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      3.435R
+  Avg Loss (R)       :      1.195R
+  Expectancy         : +    0.618R
+
+  TRADES DESTACADOS
+  ----------------------------------------
+  Mayor ganancia : $ +15,975.24  [QNCCF   TIME_STOP]
+  Mayor pérdida  : $  -4,597.29  [MSCI    FIN_BACKTEST]
+
+  ANÁLISIS POR RAZÓN DE SALIDA
+  ----------------------------------------
+  Razón                       N    Avg PnL $    Avg R       Mejor        Peor
+  ------------------------ ----  -----------  -------  ----------  ----------
+  EMA_DEATH_CROSS           176  $  -899.07  -0.847R  $+12,262.75  $-4,031.31
+  FIN_BACKTEST               10  $+ 3,108.06  + 3.054R  $+7,161.28  $-4,597.29
+  TIME_STOP                  72  $+ 4,075.35  + 3.858R  $+15,975.24  $  +258.42
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  EMA_DEATH_CROSS     :  176  (68.2%)
+  FIN_BACKTEST        :   10  (3.9%)
+  TIME_STOP           :   72  (27.9%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades= 11  WR=  9.1%  PnL=$-4,702.89
+  COST      trades= 25  WR= 44.0%  PnL=+$19,140.20
+  GWW       trades= 21  WR= 38.1%  PnL=+$11,579.83
+  HON       trades= 27  WR= 29.6%  PnL=$-1,952.34
+  LHX       trades= 22  WR= 40.9%  PnL=+$12,449.30
+  LMT       trades= 22  WR= 27.3%  PnL=+$ 5,007.50
+  MSCI      trades= 24  WR= 58.3%  PnL=+$33,627.17
+  NBTB      trades= 28  WR= 28.6%  PnL=$-7,311.24
+  NOC       trades= 24  WR= 45.8%  PnL=+$17,594.37
+  ODFL      trades= 18  WR= 55.6%  PnL=+$29,114.03
+  PKG       trades= 20  WR= 40.0%  PnL=+$12,901.67
+  QNCCF     trades=  9  WR= 44.4%  PnL=+$25,721.29
+  URNU      trades=  7  WR= 42.9%  PnL=+$13,101.01
+
+=================================================================
+  BACKTEST REPORT ACUMULADO — ema_crossover
+  Generado : 2026-03-09 15:47:58
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+ 166,269.91
+  Retorno total      : +     12.79%
+  Max Drawdown       :       38.05%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        258
+  Ganadores          :        101
+  Perdedores         :        157
+  Win Rate           :       39.1%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      3.435R
+  Avg Loss (R)       :      1.195R
+  Expectancy         : +    0.618R
+
+  TRADES DESTACADOS
+  ----------------------------------------
+  Mayor ganancia : $ +15,975.24  [QNCCF   TIME_STOP]
+  Mayor pérdida  : $  -4,597.29  [MSCI    FIN_BACKTEST]
+
+  ANÁLISIS POR RAZÓN DE SALIDA
+  ----------------------------------------
+  Razón                       N    Avg PnL $    Avg R       Mejor        Peor
+  ------------------------ ----  -----------  -------  ----------  ----------
+  EMA_DEATH_CROSS           176  $  -899.07  -0.847R  $+12,262.75  $-4,031.31
+  FIN_BACKTEST               10  $+ 3,108.06  + 3.054R  $+7,161.28  $-4,597.29
+  TIME_STOP                  72  $+ 4,075.35  + 3.858R  $+15,975.24  $  +258.42
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  EMA_DEATH_CROSS     :  176  (68.2%)
+  FIN_BACKTEST        :   10  (3.9%)
+  TIME_STOP           :   72  (27.9%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades= 11  WR=  9.1%  PnL=$-4,702.89
+  COST      trades= 25  WR= 44.0%  PnL=+$19,140.20
+  GWW       trades= 21  WR= 38.1%  PnL=+$11,579.83
+  HON       trades= 27  WR= 29.6%  PnL=$-1,952.34
+  LHX       trades= 22  WR= 40.9%  PnL=+$12,449.30
+  LMT       trades= 22  WR= 27.3%  PnL=+$ 5,007.50
+  MSCI      trades= 24  WR= 58.3%  PnL=+$33,627.17
+  NBTB      trades= 28  WR= 28.6%  PnL=$-7,311.24
+  NOC       trades= 24  WR= 45.8%  PnL=+$17,594.37
+  ODFL      trades= 18  WR= 55.6%  PnL=+$29,114.03
+  PKG       trades= 20  WR= 40.0%  PnL=+$12,901.67
+  QNCCF     trades=  9  WR= 44.4%  PnL=+$25,721.29
+  URNU      trades=  7  WR= 42.9%  PnL=+$13,101.01
+
+=================================================================
+  BACKTEST REPORT ACUMULADO — momentum_breakout
+  Generado : 2026-03-04 17:42:13
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+ 103,440.89
+  Retorno total      : +      7.96%
+  Max Drawdown       :       22.46%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        180
+  Ganadores          :         83
+  Perdedores         :         97
+  Win Rate           :       46.1%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      2.715R
+  Avg Loss (R)       :      1.265R
+  Expectancy         : +    0.570R
+
+  TRADES DESTACADOS
+  ----------------------------------------
+  Mayor ganancia : $ +12,525.87  [LMT     TIME_STOP]
+  Mayor pérdida  : $  -3,399.92  [NOC     DONCHIAN_TRAILING_STOP]
+
+  ANÁLISIS POR RAZÓN DE SALIDA
+  ----------------------------------------
+  Razón                       N    Avg PnL $    Avg R       Mejor        Peor
+  ------------------------ ----  -----------  -------  ----------  ----------
+  DONCHIAN_TRAILING_STOP    119  $  -777.23  -0.719R  $+4,438.08  $-3,399.92
+  FIN_BACKTEST                5  $+ 1,587.37  + 1.472R  $+2,766.75  $  -110.19
+  TIME_STOP                  56  $+ 3,357.03  + 3.229R  $+12,525.87  $  -831.50
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  DONCHIAN_TRAILING_STOP:  119  (66.1%)
+  FIN_BACKTEST        :    5  (2.8%)
+  TIME_STOP           :   56  (31.1%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades=  4  WR= 25.0%  PnL=$-1,259.09
+  COST      trades= 16  WR= 62.5%  PnL=+$19,863.04
+  GWW       trades= 15  WR= 46.7%  PnL=+$ 7,206.58
+  HON       trades= 18  WR= 33.3%  PnL=$-3,720.78
+  LHX       trades= 17  WR= 52.9%  PnL=+$14,988.77
+  LMT       trades= 15  WR= 60.0%  PnL=+$18,773.59
+  MSCI      trades= 20  WR= 35.0%  PnL=+$ 5,958.57
+  NBTB      trades= 16  WR= 50.0%  PnL=+$10,137.68
+  NOC       trades= 19  WR= 47.4%  PnL=+$ 7,848.35
+  ODFL      trades= 15  WR= 40.0%  PnL=+$16,399.86
+  PKG       trades= 21  WR= 42.9%  PnL=+$ 5,281.72
+  URNU      trades=  4  WR= 50.0%  PnL=+$ 1,962.61
+
+=================================================================
+  BACKTEST REPORT ACUMULADO — momentum_breakout
+  Generado : 2026-03-03 18:41:35
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+ 103,440.89
+  Retorno total      : +      7.96%
+  Max Drawdown       :       22.46%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        180
+  Ganadores          :         83
+  Perdedores         :         97
+  Win Rate           :       46.1%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      2.715R
+  Avg Loss (R)       :      1.265R
+  Expectancy         : +    0.570R
+
+  TRADES DESTACADOS
+  ----------------------------------------
+  Mayor ganancia : $ +12,525.87  [LMT     TIME_STOP]
+  Mayor pérdida  : $  -3,399.92  [NOC     DONCHIAN_TRAILING_STOP]
+
+  ANÁLISIS POR RAZÓN DE SALIDA
+  ----------------------------------------
+  Razón                       N    Avg PnL $    Avg R       Mejor        Peor
+  ------------------------ ----  -----------  -------  ----------  ----------
+  DONCHIAN_TRAILING_STOP    119  $  -777.23  -0.719R  $+4,438.08  $-3,399.92
+  FIN_BACKTEST                5  $+ 1,587.37  + 1.472R  $+2,766.75  $  -110.19
+  TIME_STOP                  56  $+ 3,357.03  + 3.229R  $+12,525.87  $  -831.50
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  DONCHIAN_TRAILING_STOP:  119  (66.1%)
+  FIN_BACKTEST        :    5  (2.8%)
+  TIME_STOP           :   56  (31.1%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades=  4  WR= 25.0%  PnL=$-1,259.09
+  COST      trades= 16  WR= 62.5%  PnL=+$19,863.04
+  GWW       trades= 15  WR= 46.7%  PnL=+$ 7,206.58
+  HON       trades= 18  WR= 33.3%  PnL=$-3,720.78
+  LHX       trades= 17  WR= 52.9%  PnL=+$14,988.77
+  LMT       trades= 15  WR= 60.0%  PnL=+$18,773.59
+  MSCI      trades= 20  WR= 35.0%  PnL=+$ 5,958.57
+  NBTB      trades= 16  WR= 50.0%  PnL=+$10,137.68
+  NOC       trades= 19  WR= 47.4%  PnL=+$ 7,848.35
+  ODFL      trades= 15  WR= 40.0%  PnL=+$16,399.86
+  PKG       trades= 21  WR= 42.9%  PnL=+$ 5,281.72
+  URNU      trades=  4  WR= 50.0%  PnL=+$ 1,962.61
+
+=================================================================
+  BACKTEST REPORT ACUMULADO — RSI(2) Connors
+  Generado : 2026-03-03 18:37:36
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+  83,745.58
+  Retorno total      : +      6.44%
+  Max Drawdown       :       25.34%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        200
+  Ganadores          :         91
+  Perdedores         :        109
+  Win Rate           :       45.5%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      2.140R
+  Avg Loss (R)       :      1.027R
+  Expectancy         : +    0.414R
+
+  TRADES DESTACADOS
+  ----------------------------------------
+  Mayor ganancia : $ +11,533.93  [LMT     TIME_STOP]
+  Mayor pérdida  : $  -3,549.49  [NOC     DONCHIAN_TRAILING_STOP]
+
+  ANÁLISIS POR RAZÓN DE SALIDA
+  ----------------------------------------
+  Razón                       N    Avg PnL $    Avg R       Mejor        Peor
+  ------------------------ ----  -----------  -------  ----------  ----------
+  DONCHIAN_TRAILING_STOP    175  $  -120.25  -0.111R  $+5,778.84  $-3,549.49
+  FIN_BACKTEST                5  $+ 1,531.33  + 1.472R  $+2,688.15  $  -100.11
+  TIME_STOP                  20  $+ 4,856.64  + 4.744R  $+11,533.93  $  +511.64
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  DONCHIAN_TRAILING_STOP:  175  (87.5%)
+  FIN_BACKTEST        :    5  (2.5%)
+  TIME_STOP           :   20  (10.0%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades=  4  WR= 50.0%  PnL=$  -250.33
+  COST      trades= 19  WR= 63.2%  PnL=+$16,967.90
+  GWW       trades= 16  WR= 43.8%  PnL=+$ 4,470.06
+  HON       trades= 21  WR= 33.3%  PnL=$-5,832.54
+  LHX       trades= 19  WR= 52.6%  PnL=+$ 9,608.82
+  LMT       trades= 19  WR= 42.1%  PnL=+$ 9,367.75
+  MSCI      trades= 20  WR= 45.0%  PnL=+$13,398.82
+  NBTB      trades= 19  WR= 52.6%  PnL=+$10,096.07
+  NOC       trades= 22  WR= 36.4%  PnL=$-2,024.87
+  ODFL      trades= 15  WR= 53.3%  PnL=+$21,528.99
+  PKG       trades= 22  WR= 36.4%  PnL=+$ 5,248.45
+  URNU      trades=  4  WR= 50.0%  PnL=+$ 1,166.47
+
+=================================================================
+  BACKTEST REPORT ACUMULADO — RSI(2) Connors
+  Generado : 2026-03-03 18:34:12
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+  83,745.58
+  Retorno total      : +      6.44%
+  Max Drawdown       :       25.34%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        200
+  Ganadores          :         91
+  Perdedores         :        109
+  Win Rate           :       45.5%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      2.140R
+  Avg Loss (R)       :      1.027R
+  Expectancy         : +    0.414R
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  DONCHIAN_TRAILING_STOP:  175  (87.5%)
+  FIN_BACKTEST        :    5  (2.5%)
+  TIME_STOP           :   20  (10.0%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades=  4  WR= 50.0%  PnL=$  -250.33
+  COST      trades= 19  WR= 63.2%  PnL=+$16,967.90
+  GWW       trades= 16  WR= 43.8%  PnL=+$ 4,470.06
+  HON       trades= 21  WR= 33.3%  PnL=$-5,832.54
+  LHX       trades= 19  WR= 52.6%  PnL=+$ 9,608.82
+  LMT       trades= 19  WR= 42.1%  PnL=+$ 9,367.75
+  MSCI      trades= 20  WR= 45.0%  PnL=+$13,398.82
+  NBTB      trades= 19  WR= 52.6%  PnL=+$10,096.07
+  NOC       trades= 22  WR= 36.4%  PnL=$-2,024.87
+  ODFL      trades= 15  WR= 53.3%  PnL=+$21,528.99
+  PKG       trades= 22  WR= 36.4%  PnL=+$ 5,248.45
+  URNU      trades=  4  WR= 50.0%  PnL=+$ 1,166.47
+
+=================================================================
+  BACKTEST REPORT ACUMULADO — RSI(2) Connors
+  Generado : 2026-03-03 18:12:52
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+   7,409.29
+  Retorno total      : +      0.57%
+  Max Drawdown       :        8.66%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        322
+  Ganadores          :        192
+  Perdedores         :        130
+  Win Rate           :       59.6%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      0.390R
+  Avg Loss (R)       :      0.518R
+  Expectancy         : +    0.023R
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  RSI_TARGET          :  321  (99.7%)
+  TIME_STOP           :    1  (0.3%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades= 12  WR= 75.0%  PnL=+$ 1,270.56
+  COST      trades= 31  WR= 58.1%  PnL=+$   841.83
+  GWW       trades= 34  WR= 52.9%  PnL=$-4,997.67
+  HON       trades= 36  WR= 66.7%  PnL=+$ 3,480.19
+  LHX       trades= 29  WR= 62.1%  PnL=+$ 2,189.04
+  LMT       trades= 27  WR= 51.9%  PnL=$-3,305.89
+  MSCI      trades= 34  WR= 67.6%  PnL=+$ 5,402.96
+  NBTB      trades= 23  WR= 56.5%  PnL=$   -20.54
+  NOC       trades= 31  WR= 71.0%  PnL=+$   696.39
+  ODFL      trades= 28  WR= 46.4%  PnL=$-3,570.22
+  PKG       trades= 27  WR= 51.9%  PnL=+$ 1,098.50
+  QNCCF     trades=  4  WR= 75.0%  PnL=+$ 3,935.22
+  URNU      trades=  6  WR= 50.0%  PnL=+$   388.90
+
+=================================================================
+  BACKTEST REPORT ACUMULADO — RSI(2) Connors
+  Generado : 2026-03-03 16:26:54
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+   3,751.52
+  Retorno total      : +      0.29%
+  Max Drawdown       :        5.86%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        105
+  Ganadores          :         61
+  Perdedores         :         44
+  Win Rate           :       58.1%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      0.447R
+  Avg Loss (R)       :      0.531R
+  Expectancy         : +    0.037R
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  RSI_TARGET          :  105  (100.0%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades=  8  WR= 62.5%  PnL=$  -884.10
+  COST      trades=  6  WR= 66.7%  PnL=+$   231.30
+  GWW       trades=  8  WR= 50.0%  PnL=$-1,686.10
+  HON       trades=  7  WR= 57.1%  PnL=$  -210.67
+  LHX       trades=  9  WR= 33.3%  PnL=$  -223.05
+  LMT       trades=  9  WR= 77.8%  PnL=+$ 1,152.41
+  MSCI      trades= 11  WR= 63.6%  PnL=+$ 2,163.48
+  NBTB      trades=  9  WR= 55.6%  PnL=+$ 2,304.74
+  NOC       trades= 13  WR= 69.2%  PnL=+$ 1,915.55
+  ODFL      trades= 12  WR= 50.0%  PnL=$-1,561.58
+  PKG       trades=  9  WR= 55.6%  PnL=$  -283.73
+  QNCCF     trades=  3  WR= 66.7%  PnL=+$ 1,752.34
+  URNU      trades=  1  WR=  0.0%  PnL=$  -919.06
+
+=================================================================
+  BACKTEST REPORT ACUMULADO — RSI(2) Connors
+  Generado : 2026-03-03 15:23:18
+  Tickers  : URNU, CELC, COST, HON, NBTB, ODFL, GWW, LHX, LMT, MSCI, NOC, PKG, QNCCF
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital por activo : $  100,000.00
+  PnL neto total     : $+   7,409.29
+  Retorno total      : +      0.57%
+  Max Drawdown       :        8.66%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :        322
+  Ganadores          :        192
+  Perdedores         :        130
+  Win Rate           :       59.6%
+
+  R-MÚLTIPLOS (Esperanza Matemática)
+  ----------------------------------------
+  Avg Win  (R)       :      0.390R
+  Avg Loss (R)       :      0.518R
+  Expectancy         : +    0.023R
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  RSI_TARGET          :  321  (99.7%)
+  TIME_STOP           :    1  (0.3%)
+
+  BREAKDOWN POR TICKER
+  ----------------------------------------
+  CELC      trades= 12  WR= 75.0%  PnL=+$ 1,270.56
+  COST      trades= 31  WR= 58.1%  PnL=+$   841.83
+  GWW       trades= 34  WR= 52.9%  PnL=$-4,997.67
+  HON       trades= 36  WR= 66.7%  PnL=+$ 3,480.19
+  LHX       trades= 29  WR= 62.1%  PnL=+$ 2,189.04
+  LMT       trades= 27  WR= 51.9%  PnL=$-3,305.89
+  MSCI      trades= 34  WR= 67.6%  PnL=+$ 5,402.96
+  NBTB      trades= 23  WR= 56.5%  PnL=$   -20.54
+  NOC       trades= 31  WR= 71.0%  PnL=+$   696.39
+  ODFL      trades= 28  WR= 46.4%  PnL=$-3,570.22
+  PKG       trades= 27  WR= 51.9%  PnL=+$ 1,098.50
+  QNCCF     trades=  4  WR= 75.0%  PnL=+$ 3,935.22
+  URNU      trades=  6  WR= 50.0%  PnL=+$   388.90
+
+=================================================================
+  BACKTEST REPORT — Estrategia: RSI(2) Connors
+  Ticker: QNCCF  |  Generado: 2026-03-03 14:48:44
+=================================================================
+
+  PERFORMANCE GENERAL
+  ----------------------------------------
+  Capital inicial    : $  100,000.00
+  PnL neto total     : $+   3,935.22
+  Retorno total      : +      3.94%
+  Max Drawdown       :        0.85%
+
+  ESTADÍSTICAS DE TRADES
+  ----------------------------------------
+  Total trades       :          4
+  Ganadores          :          3
+  Perdedores         :          1
+  Win Rate           :       75.0%
+
+  R-MÚLTIPLOS
+  ----------------------------------------
+  Avg Win  (R)       :      1.474R
+  Avg Loss (R)       :      0.524R
+  Expectancy         : +    0.974R
+
+  RAZONES DE SALIDA
+  ----------------------------------------
+  RSI_TARGET          :    4  (100.0%)
+
+  DETALLE DE TRADES
+  -----------------------------------------------------------------
+     #     ENTRADA      SALIDA      ENT$      SAL$      PnL$       R  RAZÓN
+  -----------------------------------------------------------------
+     1  2024-06-17  2024-06-24  $   0.08  $   0.09  $+1318.71  +1.32R  RSI_TARGET
+     2  2025-02-19  2025-02-20  $   0.32  $   0.61  $+2173.58  +2.15R  RSI_TARGET
+     3  2025-07-25  2025-08-06  $   1.01  $   0.92  $-542.52  -0.52R  RSI_TARGET
+     4  2026-02-06  2026-02-10  $   2.92  $   3.57  $+985.45  +0.96R  RSI_TARGET

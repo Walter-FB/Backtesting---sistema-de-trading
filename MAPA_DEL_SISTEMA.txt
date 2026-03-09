@@ -1,0 +1,216 @@
+================================================================================
+  MAPA DEL SISTEMA — Módulos y Objetos de Interés
+  Sistema de Backtracking Algorítmico — Larry Connors RSI(2)
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+  models.py
+────────────────────────────────────────────────────────────────────────────────
+
+  Candle (dataclass)
+    La unidad mínima de información del sistema. Representa UNA vela de mercado.
+    Viaja por todo el pipeline: nace en data_loader, se enriquece en
+    pronostico_del_clima, y es leída por la estrategia.
+
+    Campos OHLCV (vienen del JSON):
+      open, high, low, close  → precios de la vela
+      volume                  → volumen negociado
+      timestamp, formatted_date → temporalidad
+
+    Indicadores del proveedor (vienen del JSON, ya calculados):
+      rsi         → RSI(14) clásico
+      macd_line, signal_line, macd_histogram
+      ema_20/50/100/200        → filtro estructural principal: ema_200
+      bb_mid, bb_upper, bb_lower → Bandas de Bollinger
+
+    Indicadores calculados por el engine (arrancan en None):
+      rsi_2   → RSI(2) — señal de reversión a la media
+      atr_14  → volatilidad — para sizing de posición
+      adx_14  → fuerza de tendencia — para detectar régimen
+
+
+────────────────────────────────────────────────────────────────────────────────
+  analysis.py
+────────────────────────────────────────────────────────────────────────────────
+
+  MarketRegime (Enum)
+    Los 5 estados posibles del mercado. Solo define vocabulario — la lógica
+    de detección vive en pronostico_del_clima.
+
+      RANGING_MEAN_REVERSION  → ADX < 20, mercado lateral — operable
+      TRENDING_BULLISH        → ADX > 25 subiendo, precio > EMA200
+      TRENDING_BEARISH        → ADX > 25 subiendo, precio < EMA200
+      HIGH_VOLATILITY_CASH    → zona gris o agotamiento — no operar
+      WAITING_FOR_DATA        → buffer insuficiente para calcular
+
+
+────────────────────────────────────────────────────────────────────────────────
+  data_loader.py
+────────────────────────────────────────────────────────────────────────────────
+
+  JSONDataLoader
+    Lee el archivo JSON del proveedor y devuelve List[Candle] ordenada
+    cronológicamente. Mapea cada campo del JSON al dataclass Candle.
+    Es el punto de entrada de los datos al sistema.
+
+    Método clave:
+      load_from_json(path) → List[Candle]
+
+
+────────────────────────────────────────────────────────────────────────────────
+  pronostico_del_clima.py
+────────────────────────────────────────────────────────────────────────────────
+
+  compute_and_set_indicators(fifo)  [función]
+    Lee el FIFO en su estado actual y calcula RSI(2), ATR(14) y ADX(14).
+    Escribe los resultados directamente en fifo[-1] (la vela actual).
+    Es llamada en cada iteración del loop del engine, antes de la estrategia.
+
+  RegimeDetector  (clase)
+    Clasifica el mercado en uno de los 5 estados de MarketRegime.
+    Usa el ADX calculado y la EMA(200) del proveedor.
+    Guarda el régimen anterior para detectar pendiente del ADX.
+
+    Propiedad clave:
+      bullish_bias  → True/False/None según precio vs EMA(200)
+
+    Método clave:
+      detect(fifo) → MarketRegime
+
+  _calc_rsi / _calc_atr / _calc_adx  [funciones privadas]
+    Calculan cada indicador solo con los datos del FIFO (sin look-ahead).
+    No se llaman desde fuera del módulo.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  signal_provider.py
+────────────────────────────────────────────────────────────────────────────────
+
+  SignalProvider  (ABC — clase abstracta)
+    El contrato que toda estrategia debe cumplir para conectarse al engine.
+    Define dos métodos obligatorios. No tiene lógica propia.
+
+    Métodos abstractos:
+      check_entry(fifo, regime, bullish_bias) → bool
+      check_exit(fifo, candles_held)          → Optional[str]
+
+    Para crear una estrategia nueva: heredar de SignalProvider e implementar
+    ambos métodos.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  Strategys_Backtesting/connors_rsi2.py
+────────────────────────────────────────────────────────────────────────────────
+
+  RSI2Strategy  (hereda de SignalProvider)
+    Implementa la estrategia de reversión a la media de Larry Connors.
+
+    Condiciones de ENTRADA (todas deben cumplirse):
+      1. bullish_bias True  → precio > EMA(200)
+      2. rsi_2 < 10         → sobreventa extrema
+      3. close <= bb_lower  → precio en/bajo la Banda de Bollinger Inferior
+
+    Condiciones de SALIDA:
+      RSI_TARGET → rsi_2 > 50 (reversión completada)
+      TIME_STOP  → 10 velas sin alcanzar el target
+
+  RiskManager
+    Calcula cuántas acciones comprar para que cada trade arriesgue exactamente
+    el mismo porcentaje del capital (1% por defecto).
+
+    Fórmula: Qty = (Balance × risk_pct) / (ATR × atr_multiplier)
+
+    Métodos:
+      compute_quantity(balance, atr)  → float  (acciones a comprar)
+      compute_risk_amount(balance)    → float  ($ en riesgo)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  tracker_positions.py
+────────────────────────────────────────────────────────────────────────────────
+
+  Position  (dataclass)
+    Estado de una posición ABIERTA. Se crea al entrar, se destruye al salir.
+    Guarda ticker, precio de entrada, cantidad, ATR del momento de la señal,
+    y un contador de velas transcurridas (candles_held).
+
+  TradeRecord  (dataclass)
+    Snapshot INMUTABLE de un trade ya cerrado. Contiene todo lo necesario
+    para el análisis: PnL bruto/neto, comisión, R-múltiplo, razón de salida.
+
+  TradeTracker
+    Motor de registro. Almacena todos los TradeRecord, trackea la curva de
+    equity, calcula métricas (win rate, drawdown, expectancy) y genera los
+    reportes CSV, TXT y terminal.
+
+    Métodos clave:
+      update_equity(balance)                   → actualizar curva de equity
+      record_trade(position, exit_price, ...)  → cerrar trade y guardar
+      get_performance(initial_balance)         → dict con todas las métricas
+      print_report(initial_balance)            → reporte en terminal con colores
+      save_csv(filename)                       → historial en CSV
+      save_txt(initial_balance, ticker, ...)   → reporte en TXT
+
+
+────────────────────────────────────────────────────────────────────────────────
+  engine.py
+────────────────────────────────────────────────────────────────────────────────
+
+  TradingEngine
+    El orquestador central. Contiene el FIFO buffer y coordina todos los
+    módulos en cada iteración. No toma decisiones — delega todo.
+
+    Atributos:
+      fifo_buffer     → deque(maxlen=250) — las últimas 250 velas
+      balance         → capital disponible (cash fuera de posiciones)
+      strategy        → cualquier SignalProvider inyectado
+      risk_manager    → RiskManager para calcular tamaño
+      tracker         → TradeTracker para registro y métricas
+      regime_detector → RegimeDetector para clasificar el mercado
+
+    Método principal:
+      run_backtest(data, ticker) → ejecuta el loop completo sobre List[Candle]
+
+    Flujo por vela (en orden):
+      1. append vela al FIFO
+      2. compute_and_set_indicators → calcula RSI2/ATR/ADX
+      3. regime_detector.detect    → clasifica el mercado
+      4. ejecutar entrada pendiente (al open de HOY)
+      5. ejecutar salida pendiente  (al open de HOY)
+      6. incrementar candles_held
+      7. strategy.check_entry o check_exit → generar señal para MAÑANA
+      8. update_equity → actualizar curva de equity
+
+
+────────────────────────────────────────────────────────────────────────────────
+  _test_run.py
+────────────────────────────────────────────────────────────────────────────────
+
+  main()  [función]
+    Runner multi-activo. Descubre automáticamente todos los *_1D_*.json
+    en Data_Leo/, corre un TradingEngine aislado por cada ticker, acumula
+    los resultados y al final imprime + guarda el reporte combinado.
+
+    Flujo:
+      1. glob → encontrar todos los JSON
+      2. por cada JSON → crear engine con RSI2Strategy → run_backtest()
+      3. acumular trades y curva de equity de cada run
+      4. imprimir reporte acumulado en terminal
+      5. guardar backtest_report.txt (prepend — el más reciente arriba)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FLUJO GENERAL DEL SISTEMA
+────────────────────────────────────────────────────────────────────────────────
+
+  JSON
+   ↓ data_loader.py         crea List[Candle] con OHLCV + indicadores proveedor
+   ↓ engine.py              mete cada Candle al FIFO de a una
+   ↓ pronostico_del_clima   calcula RSI2/ATR/ADX → los escribe en la Candle
+   ↓ RegimeDetector         clasifica el mercado → MarketRegime
+   ↓ RSI2Strategy           lee la Candle decorada → señal de entrada/salida
+   ↓ engine.py              ejecuta la operación → actualiza balance
+   ↓ TradeTracker           registra el trade → métricas → reportes
+
+================================================================================
