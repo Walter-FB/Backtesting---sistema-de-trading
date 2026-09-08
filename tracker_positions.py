@@ -54,13 +54,14 @@ class Position:
     atr_at_entry : float — ATR(14) en la vela de señal (referencia)
     candles_held : int   — velas transcurridas desde la entrada (contador)
     """
-    ticker:       str
-    entry_date:   str
-    entry_price:  float
-    quantity:     float
-    risk_amount:  float
-    atr_at_entry: float
-    candles_held: int = 0   # se incrementa cada vela en el loop del engine
+    ticker:           str
+    entry_date:       str
+    entry_price:      float
+    quantity:         float
+    risk_amount:      float
+    atr_at_entry:     float
+    candles_held:     int = 0    # se incrementa cada vela en el loop del engine
+    climate_at_entry: str = ""   # label del ClimateReading vigente al momento de la señal
 
 
 @dataclass
@@ -96,6 +97,7 @@ class TradeRecord:
     exit_reason:   str
     r_multiple:    float
     balance_after: float
+    climate_label: str = ""   # clima vigente al momento de la entrada (ver Position.climate_at_entry)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -208,6 +210,7 @@ class TradeTracker:
             exit_reason   = exit_reason,
             r_multiple    = r_multiple,
             balance_after = balance_after,
+            climate_label = position.climate_at_entry,
         )
 
         self.trades.append(record)
@@ -267,7 +270,49 @@ class TradeTracker:
             "total_pnl":        total_pnl,
             "total_return_pct": total_return,
             "max_drawdown_pct": self._compute_max_drawdown(),
+            "by_climate":       self._compute_breakdown_by_climate(),
         }
+
+    def _compute_breakdown_by_climate(self) -> dict:
+        """
+        Agrupa los trades cerrados por el clima vigente al momento de la
+        entrada (Position.climate_at_entry / TradeRecord.climate_label).
+
+        Permite responder "¿en qué clima juega bien esta estrategia?" a
+        partir de los resultados reales de backtest o paper trading, sin
+        necesidad de declararlo de antemano.
+
+        Retorna
+        -------
+        dict[str, dict] — una entrada por clima con:
+          trades     : int   — cantidad de trades en ese clima
+          win_rate   : float — % de trades ganadores dentro de ese clima
+          total_pnl  : float — PnL neto acumulado en ese clima
+          expectancy : float — esperanza matemática en R, dentro de ese clima
+        """
+        by_climate: dict = {}
+        for t in self.trades:
+            label = t.climate_label or "SIN_CLIMA"
+            by_climate.setdefault(label, []).append(t)
+
+        breakdown: dict = {}
+        for label, trades in by_climate.items():
+            total = len(trades)
+            winners = [t for t in trades if t.pnl_net > 0]
+            losers = [t for t in trades if t.pnl_net <= 0]
+            win_pct = len(winners) / total
+            loss_pct = len(losers) / total
+            avg_win_r = (sum(t.r_multiple for t in winners) / len(winners)) if winners else 0.0
+            avg_loss_r = abs(sum(t.r_multiple for t in losers) / len(losers)) if losers else 0.0
+
+            breakdown[label] = {
+                "trades":     total,
+                "win_rate":   win_pct * 100,
+                "total_pnl":  sum(t.pnl_net for t in trades),
+                "expectancy": (win_pct * avg_win_r) - (loss_pct * avg_loss_r),
+            }
+
+        return breakdown
 
     def _compute_max_drawdown(self) -> float:
         """
@@ -322,7 +367,7 @@ class TradeTracker:
                 "Precio_Entrada", "Precio_Salida",
                 "Cantidad", "Comision",
                 "PnL_Bruto", "PnL_Neto", "PnL_Pct",
-                "Exit_Reason", "R_Multiple", "Balance_Despues",
+                "Exit_Reason", "R_Multiple", "Balance_Despues", "Clima_Entrada",
             ])
             for n, t in enumerate(self.trades, 1):
                 writer.writerow([
@@ -333,6 +378,7 @@ class TradeTracker:
                     f"{t.pnl_gross:.2f}",  f"{t.pnl_net:.2f}",
                     f"{t.pnl_pct:.2f}",    t.exit_reason,
                     f"{t.r_multiple:.3f}", f"{t.balance_after:.2f}",
+                    t.climate_label,
                 ])
 
         return path
@@ -403,6 +449,21 @@ class TradeTracker:
             for reason, count in sorted(reasons.items()):
                 pct = count / perf["total_trades"] * 100
                 f.write(f"  {reason:<20}: {count:>4d}  ({pct:.1f}%)\n")
+
+            # Rendimiento por clima — en qué clima juega bien esta estrategia
+            f.write("\n  RENDIMIENTO POR CLIMA\n")
+            f.write("  " + "-" * 40 + "\n")
+            for label, stats in sorted(
+                perf["by_climate"].items(), key=lambda kv: kv[1]["total_pnl"], reverse=True
+            ):
+                exp_sign = "+" if stats["expectancy"] >= 0 else ""
+                pnl_sign = "+" if stats["total_pnl"] >= 0 else ""
+                f.write(
+                    f"  {label:<24}: {stats['trades']:>4d} trades  |  "
+                    f"WR {stats['win_rate']:>5.1f}%  |  "
+                    f"PnL {pnl_sign}${stats['total_pnl']:>9,.2f}  |  "
+                    f"Exp {exp_sign}{stats['expectancy']:.3f}R\n"
+                )
 
             # Detalle de trades
             f.write("\n  DETALLE DE TRADES\n")
@@ -491,6 +552,23 @@ class TradeTracker:
             pct = count / perf["total_trades"] * 100
             col = _G if reason == "RSI_TARGET" else _Y if reason == "TIME_STOP" else _DIM
             print(f"  {col}{reason:<20}{_R}: {count:>4d}  ({pct:.1f}%)")
+
+        # Rendimiento por clima — en qué clima juega bien esta estrategia
+        print(f"\n  {_B}🌤  RENDIMIENTO POR CLIMA{_R}")
+        print(f"  {'─'*40}")
+        for label, stats in sorted(
+            perf["by_climate"].items(), key=lambda kv: kv[1]["total_pnl"], reverse=True
+        ):
+            pnl_col = _G if stats["total_pnl"] >= 0 else _RED
+            exp_col = _G if stats["expectancy"] >= 0 else _RED
+            pnl_sign = "+" if stats["total_pnl"] >= 0 else ""
+            exp_sign = "+" if stats["expectancy"] >= 0 else ""
+            print(
+                f"  {_B}{label:<24}{_R}: {stats['trades']:>4d} trades  │  "
+                f"WR {stats['win_rate']:>5.1f}%  │  "
+                f"PnL {pnl_col}{pnl_sign}${stats['total_pnl']:>9,.2f}{_R}  │  "
+                f"Exp {exp_col}{exp_sign}{stats['expectancy']:.3f}R{_R}"
+            )
 
         print(f"\n  {_DIM}Archivos generados:{_R}")
         print(f"  {_DIM}  → trades_history.csv{_R}")

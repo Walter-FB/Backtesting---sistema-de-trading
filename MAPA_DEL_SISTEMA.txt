@@ -1,6 +1,10 @@
 ================================================================================
   MAPA DEL SISTEMA — Módulos y Objetos de Interés
   Sistema de Backtracking Algorítmico — Larry Connors RSI(2)
+
+  NOTA: este mapa describe el núcleo original del sistema. La documentación
+  actualizada y completa (clima plugable, toolkit de indicadores, cripto,
+  multi-timeframe, y cómo enchufar estrategias nuevas) está en GUIA.md
 ================================================================================
 
 

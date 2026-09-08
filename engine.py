@@ -34,14 +34,16 @@ Uso
 import logging
 import os
 from collections import deque
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 from analysis import MarketRegime
+from climate_factory import ClimateFactory
+from climate_provider import ClimateProvider, ClimateReading
 from signal_provider import SignalProvider
 from Strategys_Backtesting.connors_rsi2 import RiskManager
 from data_loader import JSONDataLoader
 from models import Candle
-from pronostico_del_clima import RegimeDetector, compute_and_set_indicators
+from pronostico_del_clima import compute_and_set_indicators
 from tracker_positions import COMMISSION_PCT, Position, TradeTracker
 
 # ── Configuración de logging ──────────────────────────────────────────────────
@@ -108,15 +110,23 @@ class TradingEngine:
       9. Loguear progreso
     """
 
-    def __init__(self, strategy: SignalProvider, initial_balance: float = 100_000.0) -> None:
+    def __init__(
+        self,
+        strategy: SignalProvider,
+        climate_provider: Optional[ClimateProvider] = None,
+        initial_balance: float = 100_000.0,
+    ) -> None:
         # ── Buffer circular ───────────────────────────────────────────────────
         self.fifo_buffer: deque = deque(maxlen=FIFO_MAX_LEN)
         self.balance:     float = initial_balance
         self._initial_balance: float = initial_balance
 
-        # ── Módulo de análisis ────────────────────────────────────────────────
-        self.regime_detector: RegimeDetector = RegimeDetector()
-        self.current_regime:  MarketRegime   = MarketRegime.WAITING_FOR_DATA
+        # ── Módulo de análisis (pronóstico del clima, plugable) ───────────────
+        # Por defecto usa el clima clásico (ADX + EMA200). Cualquier otro
+        # ClimateProvider registrado en climate_factory.py es intercambiable
+        # sin tocar el engine — ver climate_provider.py.
+        self.climate_provider: ClimateProvider = climate_provider or ClimateFactory.create()
+        self.current_climate:  ClimateReading  = ClimateReading(label=MarketRegime.WAITING_FOR_DATA.name)
 
         # ── Módulo de estrategia (inyectado) ──────────────────────────────────
         # El motor no sabe qué estrategia es — solo que cumple SignalProvider.
@@ -127,16 +137,18 @@ class TradingEngine:
         self.tracker: TradeTracker = TradeTracker(output_dir=".")
 
         # ── Estado de posición y señales pendientes ───────────────────────────
-        self.current_position: Optional[Position] = None
-        self._pending_signal:  bool              = False
-        self._pending_exit:    bool              = False
-        self._pending_reason:  str               = ""
-        self._signal_atr:      Optional[float]   = None
-        self._signal_balance:  float             = 0.0
+        self.current_position:     Optional[Position] = None
+        self._pending_signal:      bool              = False
+        self._pending_exit:        bool              = False
+        self._pending_reason:      str               = ""
+        self._signal_atr:          Optional[float]   = None
+        self._signal_balance:      float             = 0.0
+        self._signal_climate_label: str              = ""
 
         logger.info(
             f"TradingEngine inicializado | "
             f"Estrategia: {type(strategy).__name__} | "
+            f"Clima: {type(self.climate_provider).__name__} | "
             f"Buffer FIFO maxlen={FIFO_MAX_LEN} | "
             f"Balance inicial: ${self.balance:,.2f} | "
             f"Comisión: {COMMISSION_PCT*100:.1f}% por lado"
@@ -144,7 +156,7 @@ class TradingEngine:
 
     # ── Backtest principal ────────────────────────────────────────────────────
 
-    def run_backtest(self, data: List[Candle], ticker: str = "TICKER") -> None:
+    def run_backtest(self, data: Iterable[Candle], ticker: str = "TICKER") -> None:
         """
         Recorre la lista de velas cronológicamente y ejecuta el loop completo:
         datos → análisis → estrategia → ejecución → registro.
@@ -157,22 +169,30 @@ class TradingEngine:
 
         Parámetros
         ----------
-        data   : List[Candle] — velas ordenadas cronológicamente
-        ticker : str          — símbolo del activo (para los reportes)
+        data   : Iterable[Candle] — velas ordenadas cronológicamente. Acepta
+                 una lista o un generador: con timeframes chicos (1m son
+                 ~4,2 millones de velas en 8 años) cargar todo en una lista
+                 no entra en memoria, y un generador permite ir leyendo por
+                 tandas sin cambiar nada del motor.
+        ticker : str — símbolo del activo (para los reportes)
         """
-        if not data:
-            logger.warning("Lista de velas vacía. Backtest abortado.")
-            return
+        # Solo se puede saber el total de antemano si `data` es una secuencia.
+        total: Optional[int] = len(data) if hasattr(data, "__len__") else None
+        total_str = f"{total} velas" if total is not None else "streaming"
 
-        total = len(data)
-        logger.info(f"Iniciando backtest sobre {total} velas — {ticker}")
+        logger.info(f"Iniciando backtest — {ticker} ({total_str})")
         print(f"\n{_B}{'═'*72}{_R}")
         print(f"  {_B}⚡ SISTEMA DE TRADING — BACKTEST{_R}")
-        print(f"  {_DIM}{ticker}  │  {total} velas  │  Buffer FIFO maxlen={FIFO_MAX_LEN}{_R}")
+        print(f"  {_DIM}{ticker}  │  {total_str}  │  Buffer FIFO maxlen={FIFO_MAX_LEN}{_R}")
         print(f"  {_DIM}Estrategia: {type(self.strategy).__name__}  │  Comisión: {COMMISSION_PCT*100:.1f}% por lado{_R}")
         print(f"{_B}{'═'*72}{_R}\n")
 
+        last_candle: Optional[Candle] = None
+        processed: int = 0
+
         for i, candle in enumerate(data):
+            last_candle = candle
+            processed   = i + 1
 
             # ── PASO 1: Agregar vela al FIFO ──────────────────────────────────
             self.fifo_buffer.append(candle)
@@ -180,8 +200,8 @@ class TradingEngine:
             # ── PASO 2: Calcular indicadores desde el buffer ──────────────────
             compute_and_set_indicators(self.fifo_buffer)
 
-            # ── PASO 3: Detectar régimen ───────────────────────────────────────
-            self.current_regime = self.regime_detector.detect(self.fifo_buffer)
+            # ── PASO 3: Detectar clima (pronóstico del clima, plugable) ──────
+            self.current_climate = self.climate_provider.detect(self.fifo_buffer)
 
             # ── PASO 4: Ejecutar entrada pendiente al OPEN de HOY ────────────
             # La señal se detectó al cierre de AYER; hoy ejecutamos al open.
@@ -205,12 +225,13 @@ class TradingEngine:
                 # Sin posición: revisar si hay señal de entrada
                 if self.strategy.check_entry(
                     self.fifo_buffer,
-                    self.current_regime,
-                    self.regime_detector.bullish_bias,
+                    self.current_climate.regime,
+                    self.current_climate.bullish_bias,
                 ):
-                    self._pending_signal = True
-                    self._signal_atr     = candle.atr_14
-                    self._signal_balance = self.balance
+                    self._pending_signal        = True
+                    self._signal_atr            = candle.atr_14
+                    self._signal_balance        = self.balance
+                    self._signal_climate_label  = self.current_climate.label
             else:
                 # Con posición: revisar si hay señal de salida
                 exit_reason = self.strategy.check_exit(
@@ -234,15 +255,18 @@ class TradingEngine:
             # ── PASO 9: Log de progreso ───────────────────────────────────────
             self._log_progress(i, candle, total)
 
+        if last_candle is None:
+            logger.warning("No llegó ninguna vela. Backtest abortado.")
+            return
+
         # ── Cierre forzado al terminar el backtest ────────────────────────────
         if self.current_position is not None:
-            last = data[-1]
-            self._execute_exit(last, "FIN_BACKTEST", use_close=True)
+            self._execute_exit(last_candle, "FIN_BACKTEST", use_close=True)
             logger.info("Posición forzada a cierre al finalizar el backtest.")
 
         # ── Resumen final ─────────────────────────────────────────────────────
         print(f"\n{_B}{'═'*72}{_R}")
-        print(f"  {_B}✅ BACKTEST COMPLETADO{_R}  {_DIM}{total} velas procesadas — {ticker}{_R}")
+        print(f"  {_B}✅ BACKTEST COMPLETADO{_R}  {_DIM}{processed} velas procesadas — {ticker}{_R}")
         print(f"  {_B}💰 Balance final   : {_GREEN}${self.balance:>12,.2f}{_R}")
         pnl = self.balance - self._initial_balance
         pnl_pct = (pnl / self._initial_balance) * 100
@@ -283,12 +307,13 @@ class TradingEngine:
 
         self.balance -= cost
         self.current_position = Position(
-            ticker       = ticker,
-            entry_date   = candle.formatted_date,
-            entry_price  = candle.open,
-            quantity     = qty,
-            risk_amount  = self.risk_manager.compute_risk_amount(self._signal_balance),
-            atr_at_entry = self._signal_atr or 0.0,
+            ticker           = ticker,
+            entry_date       = candle.formatted_date,
+            entry_price      = candle.open,
+            quantity         = qty,
+            risk_amount      = self.risk_manager.compute_risk_amount(self._signal_balance),
+            atr_at_entry     = self._signal_atr or 0.0,
+            climate_at_entry = self._signal_climate_label,
         )
         logger.info(
             f"ENTRADA | {candle.formatted_date} | {ticker} | "
@@ -334,13 +359,16 @@ class TradingEngine:
 
     # ── Logging de progreso ───────────────────────────────────────────────────
 
-    def _log_progress(self, i: int, candle: Candle, total: int) -> None:
+    def _log_progress(self, i: int, candle: Candle, total: Optional[int]) -> None:
         """
         Imprime en consola el estado del sistema cada LOG_EVERY_N velas
         (y siempre en la primera y última vela), con colores ANSI.
+
+        `total` es None cuando las velas llegan por streaming: en ese caso no
+        se puede saber cuál es la última hasta que el iterador se agota.
         """
         is_first = (i == 0)
-        is_last  = (i == total - 1)
+        is_last  = (total is not None and i == total - 1)
         is_nth   = ((i + 1) % LOG_EVERY_N == 0)
 
         if not (is_first or is_last or is_nth):
@@ -390,10 +418,10 @@ class TradingEngine:
         else:
             pos_str = f"{_GRAY}— sin EMA200  {_R}"
 
-        # ── Régimen y sesgo ───────────────────────────────────────────────────
-        regime_name = self.current_regime.name
+        # ── Clima y sesgo ─────────────────────────────────────────────────────
+        regime_name = self.current_climate.label
         regime_col  = _REGIME_COLORS.get(regime_name, _WHITE)
-        bias        = self.regime_detector.bullish_bias
+        bias        = self.current_climate.bullish_bias
         bias_str    = (
             f"{_GREEN}▲ ALCISTA{_R}" if bias is True
             else f"{_RED}▼ BAJISTA{_R}" if bias is False

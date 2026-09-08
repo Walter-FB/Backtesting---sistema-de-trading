@@ -1,0 +1,4 @@
+ccxt>=4.5
+streamlit>=1.60
+pandas>=2.0
+plotly>=5.20
