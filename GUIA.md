@@ -28,7 +28,7 @@ Cómo se garantiza acá:
 - Cuando tu estrategia dice "entrar", el motor no compra: **anota la intención**. En la vuelta siguiente del loop compra al `open` de esa vela nueva.
 - Cada operación paga **0,1% de comisión por lado** (entrada y salida), como en la vida real.
 
-La misma regla se aplica **entre timeframes** — ver sección 8, que es donde más gente se resbala.
+La misma regla se aplica **entre timeframes** — ver sección 9, que es donde más gente se resbala.
 
 ---
 
@@ -80,7 +80,73 @@ Estrategia y clima son simétricos: mismo patrón, misma forma de agregar cosas 
 
 ---
 
-## 5. Cómo enchufar una estrategia nueva
+## 5. Las estrategias incluidas
+
+Seis estrategias de cuatro familias distintas. La familia importa más que los parámetros: dos estrategias de la misma familia tienden a ganar y perder en los mismos momentos, así que tener variedad real es lo que hace que el desglose por clima diga algo.
+
+| Nombre en el registro | Familia | Qué compra |
+|---|---|---|
+| `connors_rsi2` | Reversión a la media | Caídas extremas (RSI(2) < 10) dentro de contexto alcista |
+| `pullback_tendencia` | Retroceso en tendencia | Correcciones que ya dieron vuelta, con vela de confirmación |
+| `ema_crossover` | Tendencia | Cruce de EMA(20) sobre EMA(50) |
+| `triple_ema` | Tendencia | Alineación de EMA(12) > EMA(50) > EMA(200) |
+| `momentum_breakout` | Ruptura | Máximos de 60 velas, con régimen tendencial confirmado |
+| `compresion_volatilidad` | Régimen de volatilidad | Rupturas después de que el activo se aquietó |
+
+### `triple_ema` — Alineación de tres medias
+
+Tres EMAs con roles separados: la **200** dice si el activo está estructuralmente sano, la **50** si la tendencia intermedia acompaña, y la **12** es el gatillo.
+
+- **Entra** cuando EMA(12) cruza por encima de EMA(50), estando ambas ya por encima de EMA(200) y el precio también.
+- **Sale** por cruce bajista de EMA(12) bajo EMA(50), por pérdida de la EMA(200) (stop estructural), o por time-stop de 60 velas.
+- **Parámetros**: `EMA_GATILLO=12`, `EMA_TENDENCIA=50`, `EMA_ESTRUCTURAL=200`, `TIME_STOP_VELAS=60`.
+
+El disparo es un **evento** (el cruce), no un estado. Si fuera un estado, la estrategia volvería a entrar en la vela siguiente a cada salida y quedaría comprada casi siempre.
+
+### `compresion_volatilidad` — Ruptura tras compresión
+
+No opera dirección, opera **cambio de régimen de volatilidad**. Cuando un activo se aquieta está acumulando energía; la estrategia espera esa calma y compra la ruptura.
+
+- **Compresión** medida como `ATR(10) / ATR(50) < 0.70` — la volatilidad reciente es mucho menor que la normal del activo. Se mide sobre el buffer **sin** la vela actual: si se incluyera la vela de ruptura (que por definición es grande), taparía la señal.
+- **Entra** cuando, viniendo comprimido, el cierre supera el máximo de las últimas 20 velas.
+- **Sale** por *chandelier stop*: un trailing stop anclado 3×ATR por debajo del máximo alcanzado desde la entrada. Sube con el precio, nunca baja.
+- **Parámetros**: `ATR_CORTO=10`, `ATR_LARGO=50`, `RATIO_COMPRESION=0.70`, `RUPTURA_VELAS=20`, `CHANDELIER_ATR=3.0`, `TIME_STOP_VELAS=100`.
+
+### `pullback_tendencia` — Retroceso con confirmación
+
+La contracara filosófica de `connors_rsi2`, sobre el mismo evento:
+
+- **Connors** compra *mientras* el precio cae (RSI(2) < 10). Entra barato y temprano, a veces agarra el cuchillo cayendo.
+- **Esta** espera a que el precio **deje** de caer. Entra más caro, pero solo cuando el mercado ya mostró que la corrección terminó.
+
+- **Entra** si la tendencia está intacta (precio > EMA(200), EMA(50) > EMA(200), precio > EMA(50)), hubo un RSI(14) < 40 en las últimas 5 velas, y la vela actual **cierra por encima del máximo de la anterior** — la confirmación.
+- **Sale** con RSI(14) > 65 (objetivo), por pérdida de la EMA(50), o por time-stop de 30 velas.
+- **Parámetros**: `RSI_RETROCESO=40`, `RSI_OBJETIVO=65`, `VENTANA_RETROCESO=5`, `TIME_STOP_VELAS=30`.
+
+### Cómo salieron en el dataset de acciones
+
+Corridas sobre los 13 activos de `Data_Leo/`, velas diarias, capital de $100.000 por activo, **sin optimizar un solo parámetro**:
+
+| Estrategia | Trades | Win Rate | Expectancy | PnL |
+|---|---:|---:|---:|---:|
+| `ema_crossover` | 258 | 39,1% | **+0,618R** | +$166.270 |
+| `momentum_breakout` | 180 | 46,1% | **+0,570R** | +$103.441 |
+| `triple_ema` | 221 | 36,2% | **+0,349R** | +$78.730 |
+| `compresion_volatilidad` | 83 | 38,6% | +0,035R | +$1.383 |
+| `connors_rsi2` | 322 | 59,6% | +0,023R | +$7.409 |
+| `pullback_tendencia` | 214 | 29,4% | −0,030R | −$6.592 |
+
+**Cómo leer esta tabla, que es más interesante de lo que parece:**
+
+Fijate que el orden por win rate es casi el **inverso** del orden por expectancy. `connors_rsi2` acierta 6 de cada 10 veces y casi no gana plata; `ema_crossover` falla 6 de cada 10 y es la más rentable del grupo. Eso es el comportamiento clásico de las estrategias de tendencia: muchas pérdidas chicas pagadas por pocas ganancias grandes. Es exactamente por esto que el win rate es decoración y la expectancy es el número que importa.
+
+`pullback_tendencia` queda levemente negativa y **se deja así a propósito**: tunear parámetros hasta que dé verde sobre estas mismas 13 acciones sería sobreajustar, y el backtest dejaría de significar algo. La razón estructural de su resultado es interesante: su condición de entrada pide un RSI bajo 40 *sin* que el precio pierda la EMA(50), y en una tendencia realmente fuerte eso casi no pasa — el RSI no baja tanto. Así que el setup se auto-selecciona hacia tendencias débiles y entrecortadas, que son justo las peores para operar retrocesos. Es un buen recordatorio de que una estrategia puede estar perfectamente implementada y aun así tener una premisa que se sabotea sola.
+
+**Advertencias sobre estos números**: son 13 acciones estadounidenses en velas diarias, no cripto. No hay optimización de parámetros (deliberadamente). Y resultados pasados sobre un dataset chico no predicen nada — sirven para comparar estrategias entre sí, no para estimar ganancias futuras.
+
+---
+
+## 6. Cómo enchufar una estrategia nueva
 
 Cuatro pasos. Hay una plantilla lista para copiar en `Strategys_Backtesting/_plantilla.py`.
 
@@ -112,10 +178,10 @@ Lo que tenés disponible adentro:
 
 - `fifo[-1]` — la vela actual (`.open`, `.high`, `.low`, `.close`, `.volume`, más los indicadores del proveedor: `.rsi`, `.ema_20/50/100/200`, `.macd_line`, `.bb_upper/mid/lower`, y los que calcula el motor: `.rsi_2`, `.atr_14`, `.adx_14`).
 - `fifo[-2]`, `fifo[-3]`... — las velas anteriores, hasta 250.
-- El **toolkit de indicadores** (sección 7) para calcular cualquier otra cosa.
+- El **toolkit de indicadores** (sección 8) para calcular cualquier otra cosa.
 - `bullish_bias` — `True` si el precio está sobre la EMA(200).
 - `candles_held` — cuántas velas lleva abierta la posición.
-- `regime` — el clima clásico como Enum (ver sección 6 sobre cuándo es `None`).
+- `regime` — el clima clásico como Enum (ver sección 7 sobre cuándo es `None`).
 
 El texto que devuelvas en `check_exit` aparece agrupado en los reportes, así que poné nombres que sirvan para diagnosticar: `"RSI_TARGET"`, `"TRAILING_STOP"`, `"TIME_STOP"` dicen mucho más que `"salida1"`.
 
@@ -129,10 +195,13 @@ Una línea en `strategy_factory.py`:
 from Strategys_Backtesting.mi_estrategia import MiEstrategia   # ← import
 
 STRATEGY_REGISTRY: dict[str, type[SignalProvider]] = {
-    "connors_rsi2":      RSI2Strategy,
-    "momentum_breakout": MomentumBreakoutStrategy,
-    "ema_crossover":     EMACrossoverStrategy,
-    "mi_estrategia":     MiEstrategia,        # ← acá
+    "connors_rsi2":           RSI2Strategy,
+    "momentum_breakout":      MomentumBreakoutStrategy,
+    "ema_crossover":          EMACrossoverStrategy,
+    "triple_ema":             TripleEMAStrategy,
+    "compresion_volatilidad": CompresionVolatilidadStrategy,
+    "pullback_tendencia":     PullbackTendenciaStrategy,
+    "mi_estrategia":          MiEstrategia,        # ← acá
 }
 ```
 
@@ -155,7 +224,7 @@ Eso es todo. No se toca el motor nunca.
 
 ---
 
-## 6. Cómo enchufar un pronóstico de clima nuevo
+## 7. Cómo enchufar un pronóstico de clima nuevo
 
 Mismo patrón, cuatro pasos iguales. Un clima responde una sola pregunta: **¿en qué estado está el mercado ahora?**
 
@@ -203,7 +272,7 @@ Leído: esta estrategia gana en volatilidad y lateral, y **pierde plata** en ten
 
 ---
 
-## 7. El toolkit de indicadores
+## 8. El toolkit de indicadores
 
 `indicators.py` — todas reciben el buffer FIFO y devuelven el valor de la vela actual (o `None` si todavía no hay historia suficiente). Ninguna mira el futuro.
 
@@ -233,9 +302,26 @@ if rsi_14 is not None and rsi_14 < 30 and fifo[-1].close > ema_50:
 
 Siempre chequeá `is not None` antes de comparar: durante el calentamiento inicial no hay valor.
 
+### Cuándo usar el toolkit y cuándo el campo del Candle
+
+Hay dos fuentes para un mismo indicador, y **no son intercambiables**:
+
+| Fuente | Se calcula sobre | Usala para |
+|---|---|---|
+| Campo del `Candle` (`.ema_200`, `.rsi`, `.bb_upper`...) | Toda la serie histórica | Períodos largos |
+| Función del toolkit (`ema(fifo, 200)`) | Las 250 velas del buffer | Períodos cortos, o indicadores que no existen como campo |
+
+El motivo: una EMA necesita alrededor de **3× su período** de historia para estabilizarse. Con el buffer de 250 velas:
+
+- `ema(fifo, 12)` → necesita ~36 velas. **Perfecto.**
+- `ema(fifo, 50)` → necesita ~150 velas. **Bien.**
+- `ema(fifo, 200)` → necesitaría ~600 velas. **Mal**: el valor arranca con una semilla de las primeras 200 y solo se suaviza 50 veces. No es una EMA(200) de verdad.
+
+La regla práctica: **si el indicador existe como campo del Candle, usá el campo**. El toolkit es para lo que no existe (como la EMA(12) de `triple_ema`) o para períodos cortos.
+
 ---
 
-## 8. Multi-timeframe: operar en 1m, leer el clima en diaria
+## 9. Multi-timeframe: operar en 1m, leer el clima en diaria
 
 Ejecutar en velas de 1 minuto pero decidir el contexto con velas diarias.
 
@@ -283,11 +369,11 @@ Es configurable a propósito — cambiá `htf_timeframe`, corré, y comparalo co
 8 años de BTC en 1m son **~4,2 millones de velas**. Dos consecuencias:
 
 - **No entran en memoria como lista.** Por eso `run_backtest()` acepta también un generador: las velas se procesan de a una y nunca existe la lista completa. El buffer FIFO solo necesita 250.
-- **JSON no sirve a esa escala** (~1 GB por símbolo). Para 1m hay que ir a Parquet o SQLite. El formato JSON actual está perfecto para diaria y 4h; para 1m falta implementar el almacenamiento (ver sección 11).
+- **JSON no sirve a esa escala** (~1 GB por símbolo). Para 1m hay que ir a Parquet o SQLite. El formato JSON actual está perfecto para diaria y 4h; para 1m falta implementar el almacenamiento (ver sección 13).
 
 ---
 
-## 9. Cómo leer el reporte
+## 10. Cómo leer el reporte
 
 Un repaso rápido de qué significa cada número, y cuál importa de verdad.
 
@@ -305,7 +391,7 @@ Un detalle sobre el tamaño de posición: el `RiskManager` calcula cuántas unid
 
 ---
 
-## 10. Comandos
+## 11. Comandos
 
 ```bash
 # Instalar dependencias
@@ -328,7 +414,7 @@ Salidas que genera: `trades_history.csv` (una fila por operación, con su clima)
 
 ---
 
-## 11. Mapa de archivos
+## 12. Mapa de archivos
 
 ```
   CONTRATOS (definen las formas, no hacen nada)
@@ -341,8 +427,18 @@ Salidas que genera: `trades_history.csv` (una fila por operación, con su clima)
     climate_factory.py       ← registro de climas
 
   PIEZAS INTERCAMBIABLES
-    Strategys_Backtesting/   ← estrategias  (_plantilla.py para copiar)
-    Climas_Backtesting/      ← climas       (clásico, sin_clima, multi_timeframe)
+    Strategys_Backtesting/   ← estrategias
+      _plantilla.py              plantilla para copiar
+      connors_rsi2.py            reversión a la media (+ el RiskManager)
+      pullback_tendencia.py      retroceso en tendencia con confirmación
+      ema_crossover.py           cruce EMA(20)/EMA(50)
+      triple_ema.py              alineación EMA 200/50/12
+      momentum_breakout.py       ruptura de máximos de 60 velas
+      compresion_volatilidad.py  ruptura tras compresión de volatilidad
+    Climas_Backtesting/      ← climas
+      clasico_adx_ema200.py      el de siempre (ADX + EMA200)
+      sin_clima.py               neutro, para estrategias sin filtro
+      multi_timeframe.py         leer el clima en otro timeframe
 
   MOTOR Y HERRAMIENTAS
     engine.py                ← el loop. Orquesta, no decide
@@ -365,7 +461,7 @@ Salidas que genera: `trades_history.csv` (una fila por operación, con su clima)
 
 ---
 
-## 12. Límites conocidos
+## 13. Límites conocidos
 
 Lo que el sistema **todavía no hace**, para que nadie se lleve una sorpresa:
 

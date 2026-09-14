@@ -27,15 +27,29 @@ from signal_provider import SignalProvider
 from Strategys_Backtesting.connors_rsi2 import RSI2Strategy
 from Strategys_Backtesting.momentum_breakout import MomentumBreakoutStrategy
 from Strategys_Backtesting.ema_crossover import EMACrossoverStrategy
+from Strategys_Backtesting.triple_ema import TripleEMAStrategy
+from Strategys_Backtesting.compresion_volatilidad import CompresionVolatilidadStrategy
+from Strategys_Backtesting.pullback_tendencia import PullbackTendenciaStrategy
 
 
 # ── Registro de estrategias ───────────────────────────────────────────────────
 # Clave   : nombre que se usa en _test_run.py (STRATEGY_NAME = "...")
 # Valor   : clase concreta (no instancia — el factory la instancia)
+#
+# Qué hace cada una (detalle completo en GUIA.md):
+#   connors_rsi2           → reversión a la media, compra caídas extremas
+#   momentum_breakout      → seguimiento de tendencia, ruptura de máximos de 60
+#   ema_crossover          → cruce simple de EMA(20) y EMA(50)
+#   triple_ema             → tendencia por alineación de EMA 200/50/12
+#   compresion_volatilidad → ruptura tras compresión de volatilidad
+#   pullback_tendencia     → retroceso en tendencia, con vela de confirmación
 STRATEGY_REGISTRY: dict[str, type[SignalProvider]] = {
-    "connors_rsi2":       RSI2Strategy,
-    "momentum_breakout":  MomentumBreakoutStrategy,
-    "ema_crossover":      EMACrossoverStrategy,
+    "connors_rsi2":           RSI2Strategy,
+    "momentum_breakout":      MomentumBreakoutStrategy,
+    "ema_crossover":          EMACrossoverStrategy,
+    "triple_ema":             TripleEMAStrategy,
+    "compresion_volatilidad": CompresionVolatilidadStrategy,
+    "pullback_tendencia":     PullbackTendenciaStrategy,
 }
 
 
