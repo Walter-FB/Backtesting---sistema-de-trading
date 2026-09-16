@@ -86,7 +86,7 @@ Seis estrategias de cuatro familias distintas. La familia importa más que los p
 
 | Nombre en el registro | Familia | Qué compra |
 |---|---|---|
-| `connors_rsi2` | Reversión a la media | Caídas extremas (RSI(2) < 10) dentro de contexto alcista |
+| `connors_rsi2` | Reversión a la media | Caídas extremas (RSI(2) < 10) que además tocan la Banda de Bollinger inferior, en contexto alcista |
 | `pullback_tendencia` | Retroceso en tendencia | Correcciones que ya dieron vuelta, con vela de confirmación |
 | `ema_crossover` | Tendencia | Cruce de EMA(20) sobre EMA(50) |
 | `triple_ema` | Tendencia | Alineación de EMA(12) > EMA(50) > EMA(200) |
@@ -107,10 +107,10 @@ El disparo es un **evento** (el cruce), no un estado. Si fuera un estado, la est
 
 No opera dirección, opera **cambio de régimen de volatilidad**. Cuando un activo se aquieta está acumulando energía; la estrategia espera esa calma y compra la ruptura.
 
-- **Compresión** medida como `ATR(10) / ATR(50) < 0.70` — la volatilidad reciente es mucho menor que la normal del activo. Se mide sobre el buffer **sin** la vela actual: si se incluyera la vela de ruptura (que por definición es grande), taparía la señal.
+- **Compresión** medida como `ATR(10) / ATR(50) < 0.83` (el percentil 10 del ratio observado: el 10% de velas más quietas) — la volatilidad reciente es mucho menor que la normal del activo. Se mide sobre el buffer **sin** la vela actual: si se incluyera la vela de ruptura (que por definición es grande), taparía la señal.
 - **Entra** cuando, viniendo comprimido, el cierre supera el máximo de las últimas 20 velas.
 - **Sale** por *chandelier stop*: un trailing stop anclado 3×ATR por debajo del máximo alcanzado desde la entrada. Sube con el precio, nunca baja.
-- **Parámetros**: `ATR_CORTO=10`, `ATR_LARGO=50`, `RATIO_COMPRESION=0.70`, `RUPTURA_VELAS=20`, `CHANDELIER_ATR=3.0`, `TIME_STOP_VELAS=100`.
+- **Parámetros**: `ATR_CORTO=10`, `ATR_LARGO=50`, `RATIO_COMPRESION=0.83`, `RUPTURA_VELAS=20`, `CHANDELIER_ATR=3.0`, `TIME_STOP_VELAS=100`.
 
 ### `pullback_tendencia` — Retroceso con confirmación
 
@@ -129,12 +129,12 @@ Corridas sobre los 13 activos de `Data_Leo/`, velas diarias, capital de $100.000
 
 | Estrategia | Trades | Win Rate | Expectancy | PnL |
 |---|---:|---:|---:|---:|
-| `ema_crossover` | 258 | 39,1% | **+0,618R** | +$166.270 |
-| `momentum_breakout` | 180 | 46,1% | **+0,570R** | +$103.441 |
-| `triple_ema` | 221 | 36,2% | **+0,349R** | +$78.730 |
-| `compresion_volatilidad` | 83 | 38,6% | +0,035R | +$1.383 |
-| `connors_rsi2` | 322 | 59,6% | +0,023R | +$7.409 |
-| `pullback_tendencia` | 214 | 29,4% | −0,030R | −$6.592 |
+| `ema_crossover` | 258 | 39,1% | **+0,579R** | +$156.154 |
+| `triple_ema` | 221 | 36,2% | **+0,338R** | +$76.249 |
+| `compresion_volatilidad` | 134 | 42,5% | **+0,205R** | +$26.737 |
+| `momentum_breakout` | 203 | 42,9% | +0,111R | +$21.286 |
+| `connors_rsi2` | 269 | 63,6% | +0,024R | +$6.156 |
+| `pullback_tendencia` | 214 | 29,4% | −0,015R | −$3.388 |
 
 **Cómo leer esta tabla, que es más interesante de lo que parece:**
 
@@ -143,6 +143,19 @@ Fijate que el orden por win rate es casi el **inverso** del orden por expectancy
 `pullback_tendencia` queda levemente negativa y **se deja así a propósito**: tunear parámetros hasta que dé verde sobre estas mismas 13 acciones sería sobreajustar, y el backtest dejaría de significar algo. La razón estructural de su resultado es interesante: su condición de entrada pide un RSI bajo 40 *sin* que el precio pierda la EMA(50), y en una tendencia realmente fuerte eso casi no pasa — el RSI no baja tanto. Así que el setup se auto-selecciona hacia tendencias débiles y entrecortadas, que son justo las peores para operar retrocesos. Es un buen recordatorio de que una estrategia puede estar perfectamente implementada y aun así tener una premisa que se sabotea sola.
 
 **Advertencias sobre estos números**: son 13 acciones estadounidenses en velas diarias, no cripto. No hay optimización de parámetros (deliberadamente). Y resultados pasados sobre un dataset chico no predicen nada — sirven para comparar estrategias entre sí, no para estimar ganancias futuras.
+
+### Lo que cambió al arreglar la matemática de los indicadores
+
+Una auditoría encontró tres errores en el cálculo de los indicadores: el ADX devolvía el DX (le faltaba el suavizado final), el RSI usaba media simple en vez del suavizado de Wilder, y el ATR lo mismo. Al corregirlos, dos resultados que parecían buenos se desinflaron:
+
+| Estrategia | Expectancy antes | Después | Por qué cambió |
+|---|---:|---:|---|
+| `momentum_breakout` | +0,570R | **+0,111R** | Depende del régimen `TRENDING_BULLISH`, que se decidía con el ADX roto |
+| `compresion_volatilidad` | +0,035R | **+0,205R** | Su umbral estaba calibrado contra el ATR mal calculado; se recalibró por percentil |
+| `ema_crossover` | +0,618R | +0,579R | Casi no cambia: usa las EMAs del proveedor, que estaban bien |
+| `triple_ema` | +0,349R | +0,338R | Ídem |
+
+La lección vale más que los números: **el +0,570R de `momentum_breakout` era en buena parte un artefacto de un indicador roto.** Era la segunda mejor estrategia de la tabla y pasó a ser anteúltima. Cuando el instrumento de medición está mal calibrado, las conclusiones que sacás con él son decoración — y no hay forma de saber cuáles hasta que lo arreglás y volvés a medir.
 
 ---
 
@@ -249,7 +262,9 @@ class ClimaCriptoinvierno(ClimateProvider):
         return ClimateReading(label="OTOÑO", bullish_bias=None)
 ```
 
-Se registra en `climate_factory.py` (una línea, igual que las estrategias) y se enciende con `CLIMATE_NAME` en el runner.
+Se registra en `climate_factory.py` (una línea, igual que las estrategias) y se enciende con `CLIMATE_NAME` en `_test_run_cripto.py`.
+
+**Ojo**: `_test_run.py` (el de acciones) todavía no tiene `CLIMATE_NAME` ni le pasa `climate_provider` al engine, así que usa siempre el clima por defecto. Para cambiarle el clima hay que pasárselo a mano al construir el `TradingEngine`.
 
 **El vocabulario de climas es abierto.** El sistema original tenía cinco estados fijos (`TRENDING_BULLISH`, `RANGING_MEAN_REVERSION`, etc.). Ahora podés inventar los que quieras: la etiqueta es un texto libre.
 
@@ -280,8 +295,8 @@ Leído: esta estrategia gana en volatilidad y lateral, y **pierde plata** en ten
 |---|---|
 | `sma(fifo, period)` | Media móvil simple |
 | `ema(fifo, period)` | Media móvil exponencial |
-| `rsi(fifo, period)` | RSI de Wilder (cualquier período) |
-| `atr(fifo, period)` | Average True Range — volatilidad |
+| `rsi(fifo, period)` | RSI con suavizado de Wilder |
+| `atr(fifo, period)` | Average True Range con suavizado de Wilder |
 | `adx(fifo, period)` | ADX — fuerza de tendencia (no dirección) |
 | `macd(fifo, fast, slow, signal)` | `(línea, señal, histograma)` |
 | `bollinger_bands(fifo, period, num_std)` | `(media, superior, inferior)` |
@@ -311,7 +326,9 @@ Hay dos fuentes para un mismo indicador, y **no son intercambiables**:
 | Campo del `Candle` (`.ema_200`, `.rsi`, `.bb_upper`...) | Toda la serie histórica | Períodos largos |
 | Función del toolkit (`ema(fifo, 200)`) | Las 250 velas del buffer | Períodos cortos, o indicadores que no existen como campo |
 
-El motivo: una EMA necesita alrededor de **3× su período** de historia para estabilizarse. Con el buffer de 250 velas:
+Los indicadores de Wilder (RSI, ATR, ADX) son **recursivos**: el valor de hoy arrastra todo el historial anterior. Por eso el toolkit los calcula sobre todo el buffer y no sobre una ventana corta — promediar solo las últimas `period` variaciones da otro indicador distinto (el RSI de Cutler, que difiere del de Wilder en ~6,6 puntos y hace que ~9% de las decisiones con umbrales 30/70 caigan del lado contrario).
+
+El mismo principio, aplicado a la EMA: necesita alrededor de **3× su período** de historia para estabilizarse. Con el buffer de 250 velas:
 
 - `ema(fifo, 12)` → necesita ~36 velas. **Perfecto.**
 - `ema(fifo, 50)` → necesita ~150 velas. **Bien.**
@@ -356,7 +373,7 @@ MultiTimeframeClimate(velas_4h, htf_timeframe="4h", inner=ClimaCriptoinvierno())
 
 ### Qué timeframe conviene para el clima
 
-**Diaria**, como punto de partida. La EMA(200) diaria son ~9,5 meses: es la referencia macro que define bull/bear en cripto y lo que hace reconocible un "criptoinvierno". Además cambia lento, así que el filtro no se prende y apaga cada dos días ensuciando la atribución por clima.
+**Diaria**, como punto de partida. La EMA(200) diaria son ~6,6 meses en cripto (que opera los 365 días del año; en acciones, con ~252 ruedas, serían ~9,5 meses): es la referencia macro que define bull/bear y lo que hace reconocible un "criptoinvierno". Además cambia lento, así que el filtro no se prende y apaga cada dos días ensuciando la atribución por clima.
 
 **4h** sirve como capa táctica (EMA200 ≈ 33 días), no como reemplazo de la diaria. **12h** no tiene ni la referencia macro de la diaria ni la reactividad de 4h.
 
@@ -387,7 +404,17 @@ Un repaso rápido de qué significa cada número, y cuál importa de verdad.
 
 La regla mental: **Expectancy positiva + drawdown tolerable = sistema viable.** El win rate es decoración.
 
-Un detalle sobre el tamaño de posición: el `RiskManager` calcula cuántas unidades comprar para que **cada operación arriesgue el mismo porcentaje del capital** (1% por defecto), usando el ATR como medida de volatilidad. Fórmula: `cantidad = (balance × 1%) / (ATR × 2)`. Por eso los R-múltiplos son comparables entre operaciones y entre activos.
+### El R-múltiplo no es una unidad de riesgo (leer esto)
+
+El `RiskManager` calcula la cantidad con `cantidad = (balance × 1%) / (ATR × 2)`. Esa fórmula da el tamaño tal que un movimiento en contra de 2×ATR cuesta el 1% del capital — **pero eso solo es cierto si la estrategia corta la pérdida en 2×ATR, y ninguna lo hace.** Usan time-stops, cruces de medias o trailing a 3×ATR.
+
+Consecuencia: las pérdidas no están acotadas en −1R. Sobre `Data_Leo` el rango real va de **−4,10R a +2,62R**.
+
+La lectura correcta es otra, y es igual de útil: como R = 1% del balance, **el R-múltiplo es el porcentaje de la cuenta ganado o perdido en esa operación**. Una expectancy de +0,579R significa "+0,58% de la cuenta por operación promedio". Sirve perfecto para comparar estrategias entre sí (el divisor es idéntico para todas), pero no lo leas como "gané 0,58 veces lo que arriesgué".
+
+### El tope de exposición
+
+Sin tope, esa misma fórmula compromete una porción enorme del capital: medido sobre `Data_Leo` daba **25,9% del capital por operación en promedio, con picos de 55,2%**, mientras el sistema anunciaba arriesgar 1%. Por eso existe `MAX_POSITION_PCT` (25% por defecto), que acota el nocional. Se activa seguido — en `compresion_volatilidad` limita el 60% de los dimensionamientos — así que si lo cambiás, los resultados se mueven.
 
 ---
 
@@ -406,8 +433,10 @@ python _test_run.py
 # Backtest masivo multi-activo — cripto (descarga y cachea en Data_Cripto/)
 python _test_run_cripto.py
 
-# Tests de alineación entre timeframes
-python tests/test_multi_timeframe.py
+# Tests (cada uno cubre bugs reales que ya ocurrieron)
+python tests/test_multi_timeframe.py    # alineación entre timeframes
+python tests/test_indicadores.py        # matemática de RSI / ATR / ADX
+python tests/test_estado_y_riesgo.py    # estado, sizing y pipeline de datos
 ```
 
 Salidas que genera: `trades_history.csv` (una fila por operación, con su clima), `backtest_report.txt` (reporte completo), y el resumen a color en la terminal.
@@ -457,6 +486,9 @@ Salidas que genera: `trades_history.csv` (una fila por operación, con su clima)
     _test_run.py             ← backtest masivo de acciones
     _test_run_cripto.py      ← backtest masivo de cripto
     tests/                   ← tests de correctitud
+      test_multi_timeframe.py   alineación entre timeframes
+      test_indicadores.py       matemática de los indicadores
+      test_estado_y_riesgo.py   estado, sizing y pipeline de datos
 ```
 
 ---
@@ -468,6 +500,9 @@ Lo que el sistema **todavía no hace**, para que nadie se lleve una sorpresa:
 - **Solo opera en largo.** No hay ventas en corto.
 - **Una posición por vez, por activo.** No hay pirámides ni posiciones simultáneas en el mismo activo.
 - **Sin slippage.** Se asume que la orden se llena exactamente al `open`. En 1m y en activos ilíquidos esto es optimista.
+- **No hay ejecución intravela.** El motor nunca mira el `.high` ni el `.low` de la vela en curso: todo stop se evalúa al CIERRE y se ejecuta al open siguiente. Esto significa que **ningún stop puede frenar un gap** — ni el chandelier de `compresion_volatilidad` ni el trailing de `momentum_breakout`. En cripto a 1 minuto, donde el precio salta, los stops son bastante más porosos de lo que parecen. Por lo mismo, el **drawdown está subestimado**: se calcula sobre cierres, y usando mínimos intradiarios sube (en COST pasa de 5,59% a 7,56%).
+- **Velocidad: ~3.900 velas/segundo.** Los indicadores de Wilder son recursivos y se recalculan desde el buffer en cada vela. Para diaria y 4h es instantáneo; para 8 años de 1m serían ~18 minutos por activo. Si eso molesta, la solución es calcularlos de forma incremental guardando estado entre velas, no volver a la matemática aproximada.
+- **El loader de cripto no detecta huecos** en la serie (sí deduplica velas repetidas).
 - **Sin financiamiento ni fondeo.** No modela funding rates de perpetuos.
 - **1m todavía no tiene almacenamiento propio.** Falta el loader de Parquet/SQLite y la descarga bulk desde `data.binance.vision` (la API REST pagina de a 1000 velas: bajar 8 años de 1m son ~4.200 requests).
 - **Historia real disponible en Binance:** BTC/USDT desde agosto 2017 (~8 años), ADA desde 2018, SOL desde agosto 2020 (~5 años). No hay 10 años de cripto en Binance.

@@ -33,6 +33,7 @@ from collections import deque
 from typing import Optional
 
 from analysis import MarketRegime
+from indicators import adx as _adx, atr as _atr, rsi as _rsi
 
 
 # ── Constantes de períodos ────────────────────────────────────────────────────
@@ -42,144 +43,17 @@ ADX_PERIOD:  int = 14   # Fuerza de tendencia — para clasificar el régimen
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# BLOQUE 1: FUNCIONES DE CÁLCULO
-# (solo los indicadores ausentes en el JSON)
+# BLOQUE 1: CÁLCULO DE INDICADORES
 # ═══════════════════════════════════════════════════════════════════════════════
-
-def _calc_rsi(closes: list, period: int) -> Optional[float]:
-    """
-    RSI (Relative Strength Index) usando el método de suavizado de Wilder.
-    Requiere al menos period + 1 cierres en el buffer.
-
-    Ejemplo: RSI(2) necesita 3 cierres mínimo.
-    """
-    if len(closes) < period + 1:
-        return None
-
-    relevant = closes[-(period + 1):]
-    gains, losses = [], []
-
-    for i in range(1, len(relevant)):
-        delta = relevant[i] - relevant[i - 1]
-        if delta > 0:
-            gains.append(delta)
-            losses.append(0.0)
-        else:
-            gains.append(0.0)
-            losses.append(abs(delta))
-
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
-
-    if avg_loss == 0:
-        return 100.0
-
-    rs = avg_gain / avg_loss
-    return 100.0 - (100.0 / (1.0 + rs))
-
-
-def _calc_atr(highs: list, lows: list, closes: list, period: int) -> Optional[float]:
-    """
-    ATR (Average True Range) — medida de volatilidad real de la vela.
-    True Range = max(H-L, |H-C_prev|, |L-C_prev|)
-
-    Requiere al menos period + 1 velas en el buffer.
-    """
-    n = len(closes)
-    if n < period + 1 or len(highs) < period + 1 or len(lows) < period + 1:
-        return None
-
-    true_ranges = []
-    start = max(1, n - period)
-
-    for i in range(start, n):
-        tr = max(
-            highs[i] - lows[i],
-            abs(highs[i] - closes[i - 1]),
-            abs(lows[i]  - closes[i - 1]),
-        )
-        true_ranges.append(tr)
-
-    if len(true_ranges) < period:
-        return None
-
-    return sum(true_ranges[-period:]) / period
-
-
-def _calc_adx(highs: list, lows: list, closes: list, period: int) -> Optional[float]:
-    """
-    ADX (Average Directional Index) — mide la FUERZA de la tendencia (no dirección).
-
-    `period` = 14 (ADX_PERIOD): ventana de suavizado de Wilder.
-    NO son las 250 del FIFO — el FIFO garantiza historia disponible;
-    el period define cuántas velas usa el cálculo (ventana = 2×14 = 28 velas).
-
-    El ADX no está en los JSONs del proveedor → siempre se calcula aquí.
-
-    Proceso:
-      1. Calcular TR, +DM y -DM para cada vela de la ventana
-      2. Suavizar con el método de Wilder
-      3. Calcular +DI y -DI (dirección normalizada contra la volatilidad)
-      4. DX = qué tan separadas están +DI y -DI → fuerza del movimiento
-    """
-    total_candles        = len(closes)
-    min_candles_required = period * 2 + 1
-
-    if total_candles < min_candles_required or len(highs) < min_candles_required or len(lows) < min_candles_required:
-        return None
-
-    # Ventana de análisis: 2×period velas (14 para arrancar Wilder + 14 para estabilizarlo)
-    calculation_window = min(total_candles, period * 2)
-    true_ranges, bullish_dm_list, bearish_dm_list = [], [], []
-
-    for i in range(total_candles - calculation_window, total_candles):
-        high       = highs[i]
-        low        = lows[i]
-        prev_high  = highs[i - 1]
-        prev_low   = lows[i - 1]
-        prev_close = closes[i - 1]
-
-        # True Range: rango real considerando gaps con la vela anterior
-        true_range = max(high - low, abs(high - prev_close), abs(low - prev_close))
-
-        # +DM: movimiento alcista — solo cuenta si fue mayor que el bajista
-        bullish_dm = max(high - prev_high, 0) if (high - prev_high) > (prev_low - low) else 0
-        # -DM: movimiento bajista — solo cuenta si fue mayor que el alcista
-        bearish_dm = max(prev_low - low,   0) if (prev_low - low) > (high - prev_high) else 0
-
-        true_ranges.append(true_range)
-        bullish_dm_list.append(bullish_dm)
-        bearish_dm_list.append(bearish_dm)
-
-    if len(true_ranges) < period:
-        return None
-
-    def wilder_smooth(data_series: list, smoothing_period: int) -> float:
-        """Primera media simple, luego suavizado exponencial de Wilder."""
-        running_total = sum(data_series[:smoothing_period])
-        for new_value in data_series[smoothing_period:]:
-            running_total = running_total - (running_total / smoothing_period) + new_value
-        return running_total
-
-    smoothed_atr        = wilder_smooth(true_ranges,     period)
-    smoothed_bullish_dm = wilder_smooth(bullish_dm_list, period)
-    smoothed_bearish_dm = wilder_smooth(bearish_dm_list, period)
-
-    if smoothed_atr == 0:
-        return 0.0
-
-    # +DI y -DI: movimiento direccional normalizado contra la volatilidad real (ATR)
-    bullish_directional_index  = 100 * smoothed_bullish_dm / smoothed_atr
-    bearish_directional_index  = 100 * smoothed_bearish_dm / smoothed_atr
-    total_directional_strength = bullish_directional_index + bearish_directional_index
-
-    if total_directional_strength == 0:
-        return 0.0
-
-    # DX: qué tan separadas están las dos líneas → convicción del movimiento
-    directional_index = 100 * abs(bullish_directional_index - bearish_directional_index) / total_directional_strength
-    return directional_index
-
+#
+# Este módulo ya NO implementa sus propios indicadores: los toma de
+# indicators.py, que es la única implementación de cada uno en todo el sistema.
+#
+# Antes había tres implementaciones paralelas del RSI, el ATR y el ADX (acá,
+# en indicators.py y en crypto_data_loader.py) y daban números distintos sobre
+# los mismos datos. Una estrategia que usara `indicators.rsi()` y otra que
+# leyera `candle.rsi` estaban mirando indicadores diferentes creyendo que eran
+# el mismo. Colapsarlas en una sola hace imposible que vuelvan a divergir.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # BLOQUE 2: ACTUALIZACIÓN DE INDICADORES EN LA VELA ACTUAL
@@ -211,18 +85,13 @@ def compute_and_set_indicators(fifo: deque) -> None:
     if not fifo:
         return
 
-    # Extraer series en orden cronológico desde el buffer
-    closes = [c.close for c in fifo]
-    highs  = [c.high  for c in fifo]
-    lows   = [c.low   for c in fifo]
-
     # La vela actual es la última del buffer
     current = fifo[-1]
 
-    # ── Calcular y asignar ────────────────────────────────────────────────────
-    current.rsi_2  = _calc_rsi(closes, RSI2_PERIOD)
-    current.atr_14 = _calc_atr(highs, lows, closes, ATR_PERIOD)
-    current.adx_14 = _calc_adx(highs, lows, closes, ADX_PERIOD)
+    # ── Calcular y asignar (una sola implementación: indicators.py) ───────────
+    current.rsi_2  = _rsi(fifo, RSI2_PERIOD)
+    current.atr_14 = _atr(fifo, ATR_PERIOD)
+    current.adx_14 = _adx(fifo, ADX_PERIOD)
 
     # EMA(200) del proveedor ya está en current.ema_200 — se usa directamente
     # en RegimeDetector para el sesgo estructural. No se recalcula.

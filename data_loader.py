@@ -97,16 +97,43 @@ class JSONDataLoader:
         )
 
         candles: List[Candle] = []
+        omitidas: int = 0
+        primer_error: Optional[str] = None
 
         for ts_key, entry in raw["data"].items():
             try:
                 candle = self._parse_entry(entry)
                 candles.append(candle)
-            except (KeyError, TypeError) as e:
-                logger.warning(
-                    f"Entrada {ts_key} omitida por error de parsing: {e}"
-                )
+            except (KeyError, TypeError, ValueError, AttributeError) as e:
+                omitidas += 1
+                if primer_error is None:
+                    primer_error = f"entrada {ts_key}: {e}"
                 continue
+
+        # ── Detección de corrupción ───────────────────────────────────────────
+        # Antes cada entrada rota se logueaba por separado y se seguía adelante:
+        # un archivo íntegramente corrupto devolvía una lista VACÍA sin lanzar
+        # nada, y el backtest reportaba "sin operaciones" como si el activo no
+        # hubiera dado señales. Un archivo ilegible tiene que fallar fuerte.
+        total_entradas = len(raw["data"])
+
+        if omitidas:
+            logger.warning(
+                f"{omitidas} de {total_entradas} entradas omitidas por error de "
+                f"parsing en '{file_path}'. Primera: {primer_error}"
+            )
+
+        if total_entradas > 0 and not candles:
+            raise ValueError(
+                f"No se pudo leer ninguna de las {total_entradas} entradas de "
+                f"'{file_path}'. Primera falla: {primer_error}"
+            )
+
+        if expected_count not in ("?", None) and len(candles) != expected_count:
+            logger.warning(
+                f"El archivo declara {expected_count} velas pero se cargaron "
+                f"{len(candles)}."
+            )
 
         # ── Ordenamiento cronológico ascendente ───────────────────────────
         candles.sort(key=lambda c: c.timestamp)
@@ -153,7 +180,10 @@ class JSONDataLoader:
 
         return Candle(
             # Temporalidad
-            timestamp=entry["timestamp"],
+            # El int() es necesario: si el timestamp viniera como texto, el
+            # ordenamiento cronológico posterior sería alfabético ('10' < '2')
+            # y el motor asume que las velas llegan en orden.
+            timestamp=int(entry["timestamp"]),
             formatted_date=entry.get("formatted_date", ""),
             # OHLCV
             open=float(ohlcv["open"]),

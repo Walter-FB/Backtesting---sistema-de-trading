@@ -27,9 +27,13 @@ Reglas
 ------
 ENTRADA (señal al cierre, ejecución al OPEN de la vela siguiente):
   1. Tendencia intacta : close > EMA(200)  y  EMA(50) > EMA(200)
-  2. Hubo retroceso    : el RSI(14) estuvo bajo 40 en alguna de las
+  2. El retroceso no perforó la EMA(50) : close > EMA(50).
+                         Tiene que ser coherente con la salida PERDIO_EMA50:
+                         sin esta condición la estrategia abría operaciones
+                         que YA cumplían su condición de salida.
+  3. Hubo retroceso    : el RSI(14) estuvo bajo 40 en alguna de las
                          últimas 5 velas
-  3. CONFIRMACIÓN      : la vela actual cierra por encima del MÁXIMO de la
+  4. CONFIRMACIÓN      : la vela actual cierra por encima del MÁXIMO de la
                          vela anterior
 
 La condición 3 es el corazón de la estrategia. Cerrar por encima del máximo

@@ -113,6 +113,7 @@ class CryptoDataLoader:
         logger.info(f"Descargando {symbol} {timeframe} desde {self.exchange_id}...")
 
         raw_rows: List[list] = []
+        vistos: set = set()
         cursor = since_ms
 
         while True:
@@ -121,21 +122,35 @@ class CryptoDataLoader:
             )
             if not batch:
                 break
-            raw_rows.extend(batch)
+
+            # Deduplicar por timestamp: las páginas pueden solaparse, y una
+            # vela repetida rompe el orden cronológico que el motor asume.
+            nuevas = [fila for fila in batch if fila[0] not in vistos]
+            vistos.update(fila[0] for fila in nuevas)
+            raw_rows.extend(nuevas)
 
             if max_candles is not None and len(raw_rows) >= max_candles:
                 break
 
-            last_ts = batch[-1][0]
-            if cursor is not None and last_ts <= cursor:
-                break  # el exchange no avanzó — evitar loop infinito
-            cursor = last_ts + 1
+            if not nuevas:
+                break  # toda la página repetida: el exchange no avanza
+
+            # Se toma el máximo y no batch[-1] porque no todos los exchanges
+            # devuelven las velas en orden ascendente.
+            ts_max = max(fila[0] for fila in batch)
+            if cursor is not None and ts_max < cursor:
+                break  # el exchange retrocedió — cortar antes de ciclar
+            cursor = ts_max + 1
 
             if len(batch) < page_limit:
                 break  # última página parcial — no hay más datos
 
         if max_candles is not None:
-            raw_rows = raw_rows[-max_candles:]
+            # Desde el COMIENZO del rango pedido. Antes cortaba con
+            # raw_rows[-max_candles:] y se quedaba con la cola: pedir 500 velas
+            # desde una fecha devolvía las velas 500 a 999, descartando en
+            # silencio justo las 500 más viejas que se habían pedido.
+            raw_rows = raw_rows[:max_candles]
 
         logger.info(f"{len(raw_rows)} velas descargadas para {symbol} {timeframe}.")
 
@@ -257,8 +272,18 @@ def _save_candles_as_json(candles: List[Candle], symbol: str, timeframe: str, pa
             },
         }
 
+    # El JSON indexa por timestamp, así que dos velas con el mismo timestamp
+    # se pisan y una desaparece sin avisar. Se reporta el número REAL guardado
+    # (no len(candles)) para que el archivo no mienta sobre su contenido.
+    if len(data) != len(candles):
+        logger.warning(
+            f"{len(candles) - len(data)} velas con timestamp duplicado se "
+            f"colapsaron al guardar {symbol} {timeframe}: se guardan {len(data)} "
+            f"de {len(candles)}."
+        )
+
     payload = {
-        "meta": {"symbol": symbol, "timeframe": timeframe, "candles": len(candles)},
+        "meta": {"symbol": symbol, "timeframe": timeframe, "candles": len(data)},
         "data": data,
     }
 

@@ -8,7 +8,7 @@ Filosofía:
   Cuando el mercado tiene tendencia confirmada (ADX > 25 subiendo) y el precio
   rompe el máximo de los últimos 20 días, es señal de que la fuerza compradora
   es real y tiene momentum. Se entra en la dirección del movimiento y se deja
-  correr hasta que el precio pierda fuerza (trailing stop de 10 días).
+  correr hasta que el precio pierda fuerza (trailing stop de 20 días).
 
 Reglas de la estrategia:
   ENTRADA (señal al cierre, ejecución al OPEN del día siguiente):
@@ -18,7 +18,7 @@ Reglas de la estrategia:
        (el Higher High de 60 ya implica esto — se verifica igual para claridad)
 
   SALIDA:
-    • Trailing Stop (10 días) : close < min low de los últimos 10 días
+    • Trailing Stop (20 días) : close < min low de los últimos 20 días
     • Time-stop  (60 velas)   : válvula de seguridad si el mercado se para
 
 Sizing: igual que RSI2 — 1% del capital / (ATR × 2.0)
@@ -133,7 +133,7 @@ class MomentumBreakoutStrategy(SignalProvider):
 
         Retorna
         -------
-        "DONCHIAN_TRAILING_STOP" : close < min low de los últimos 10 días
+        "DONCHIAN_TRAILING_STOP" : close < min low de los últimos 20 días
         "TIME_STOP"              : válvula de seguridad — 60 velas máximas
         None                     : mantener posición
         """
@@ -144,14 +144,14 @@ class MomentumBreakoutStrategy(SignalProvider):
         if candles_held >= TIME_STOP_CANDLES:
             return "TIME_STOP"
 
-        # ── Trailing Stop: close < mínimo de los últimos 10 días ─────────────
+        # ── Trailing Stop: close < mínimo de los últimos 20 días ─────────────
         if len(fifo) < TRAILING_STOP_PERIOD + 1:
             return None  # no hay suficiente historia — mantener
 
         fifo_list = list(fifo)
         current = fifo[-1]
 
-        # Mínimo de los últimos 10 días (sin incluir la vela actual)
+        # Mínimo de los últimos 20 días (sin incluir la vela actual)
         lows_last_10 = [c.low for c in fifo_list[-(TRAILING_STOP_PERIOD + 1):-1]]
         trailing_stop_level = min(lows_last_10)
 

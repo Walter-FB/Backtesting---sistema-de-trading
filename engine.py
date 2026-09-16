@@ -144,6 +144,7 @@ class TradingEngine:
         self._signal_atr:          Optional[float]   = None
         self._signal_balance:      float             = 0.0
         self._signal_climate_label: str              = ""
+        self.descartes:            int               = 0   # señales que no se pudieron ejecutar
 
         logger.info(
             f"TradingEngine inicializado | "
@@ -176,6 +177,24 @@ class TradingEngine:
                  tandas sin cambiar nada del motor.
         ticker : str — símbolo del activo (para los reportes)
         """
+        # ── Reset de estado ───────────────────────────────────────────────────
+        # Sin esto, un segundo run_backtest() sobre el mismo engine arranca con
+        # las 250 velas del activo anterior todavía en el buffer: los
+        # indicadores de la primera vela del activo nuevo salen calculados con
+        # precios de otro activo. Es contaminación cruzada, y encima silenciosa
+        # (el RSI arrancaba en 0.0 en vez de None).
+        self.fifo_buffer.clear()
+        self.balance               = self._initial_balance
+        self.current_position      = None
+        self._pending_signal       = False
+        self._pending_exit         = False
+        self._pending_reason       = ""
+        self._signal_atr           = None
+        self._signal_balance       = 0.0
+        self._signal_climate_label = ""
+        self.descartes             = 0
+        self.current_climate       = ClimateReading(label=MarketRegime.WAITING_FOR_DATA.name)
+
         # Solo se puede saber el total de antemano si `data` es una secuencia.
         total: Optional[int] = len(data) if hasattr(data, "__len__") else None
         total_str = f"{total} velas" if total is not None else "streaming"
@@ -299,11 +318,22 @@ class TradingEngine:
         candle : Candle — vela del día de ejecución (su open es el precio)
         ticker : str    — símbolo del activo para el registro
         """
-        qty  = self.risk_manager.compute_quantity(self._signal_balance, self._signal_atr)
+        qty  = self.risk_manager.compute_quantity(
+            self._signal_balance, self._signal_atr, price=candle.open,
+        )
         cost = candle.open * qty * (1 + COMMISSION_PCT)
 
         if qty <= 0 or cost > self.balance:
-            return   # sin ATR o sin capital suficiente
+            # Señal descartada. Se loguea en vez de desaparecer en silencio:
+            # sobre Data_Leo esto se comía el 3% de las señales sin dejar
+            # rastro, sesgando los resultados hacia los activos de ATR alto.
+            self.descartes += 1
+            logger.warning(
+                f"SEÑAL DESCARTADA | {candle.formatted_date} | {ticker} | "
+                f"Qty={qty:.4f} | Costo=${cost:,.2f} | Balance=${self.balance:,.2f} | "
+                f"Motivo: {'ATR no disponible' if qty <= 0 else 'capital insuficiente'}"
+            )
+            return
 
         self.balance -= cost
         self.current_position = Position(

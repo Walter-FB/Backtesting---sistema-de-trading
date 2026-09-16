@@ -48,6 +48,7 @@ Uso
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import deque
 from typing import List, Optional
@@ -57,6 +58,8 @@ from climate_provider import ClimateProvider, ClimateReading
 from Climas_Backtesting.clasico_adx_ema200 import ClassicRegimeClimate
 from models import Candle
 from pronostico_del_clima import compute_and_set_indicators
+
+logger = logging.getLogger(__name__)
 
 # Cuántas velas HTF mantiene el buffer interno. 250 velas diarias ≈ 1 año.
 HTF_BUFFER_LEN: int = 250
@@ -113,10 +116,68 @@ class MultiTimeframeClimate(ClimateProvider):
         self._htf_seconds: int = timeframe_to_seconds(htf_timeframe)
         self._inner: ClimateProvider = inner or ClassicRegimeClimate()
 
+        self._buffer_len: int = buffer_len
         self._htf_buffer: deque = deque(maxlen=buffer_len)
         self._cursor: int = 0   # próxima vela HTF candidata a entrar al buffer
+        self._ultimo_ts_visto: float = float("-inf")
 
         self._last_reading: ClimateReading = ClimateReading(
+            label=MarketRegime.WAITING_FOR_DATA.name,
+            regime=MarketRegime.WAITING_FOR_DATA,
+        )
+
+        self._validar_espaciado()
+
+    # ── Validación ────────────────────────────────────────────────────────────
+
+    def _validar_espaciado(self) -> None:
+        """
+        Avisa si el `htf_timeframe` declarado no coincide con el espaciado real
+        de las velas.
+
+        Por qué importa: declarar "1h" para velas que en realidad son diarias
+        hace que el sistema considere cerrada una vela diaria una hora después
+        de abrirla — o sea, HABILITA LOOK-AHEAD. Es un error de configuración
+        silencioso y caro, así que conviene gritarlo.
+        """
+        if len(self._htf_candles) < 3:
+            return
+
+        difs = [
+            b.timestamp - a.timestamp
+            for a, b in zip(self._htf_candles, self._htf_candles[1:])
+        ]
+        difs.sort()
+        mediana = difs[len(difs) // 2]
+
+        if mediana > 0 and mediana != self._htf_seconds:
+            logger.warning(
+                f"El timeframe declarado ('{self._htf_timeframe}' = "
+                f"{self._htf_seconds}s) no coincide con el espaciado real de "
+                f"las velas ({mediana}s). Si el declarado es MENOR que el real, "
+                f"se habilita look-ahead: se daría por cerrada una vela que "
+                f"todavía se está formando."
+            )
+
+    # ── Reset de estado ───────────────────────────────────────────────────────
+
+    def _reiniciar(self) -> None:
+        """
+        Vuelve el clima al estado inicial.
+
+        Se dispara cuando el tiempo retrocede, que es lo que pasa al reusar la
+        misma instancia en un segundo backtest. Sin esto, el segundo run
+        arrancaba con el cursor donde lo dejó el primero y devolvía el clima de
+        una fecha futura: en la vela 0 del activo nuevo ya "sabía" cómo venía el
+        mercado meses después.
+
+        Nota: reinicia el recorrido de las velas HTF, pero no el estado interno
+        que pueda tener el pronóstico anidado (`inner`). Como el buffer se
+        vuelve a llenar en orden, ese estado se recompone solo en pocas velas.
+        """
+        self._htf_buffer = deque(maxlen=self._buffer_len)
+        self._cursor = 0
+        self._last_reading = ClimateReading(
             label=MarketRegime.WAITING_FOR_DATA.name,
             regime=MarketRegime.WAITING_FOR_DATA,
         )
@@ -134,6 +195,12 @@ class MultiTimeframeClimate(ClimateProvider):
             return self._last_reading
 
         now_ts = fifo[-1].timestamp
+
+        # El tiempo retrocedió → es otro backtest sobre la misma instancia.
+        # Seguir con el cursor donde quedó devolvería clima del futuro.
+        if now_ts < self._ultimo_ts_visto:
+            self._reiniciar()
+        self._ultimo_ts_visto = now_ts
 
         while self._cursor < len(self._htf_candles):
             htf_candle = self._htf_candles[self._cursor]

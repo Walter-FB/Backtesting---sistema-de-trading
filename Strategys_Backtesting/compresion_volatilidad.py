@@ -22,8 +22,24 @@ Comparando dos ATR de distinto plazo:
 
     ratio = ATR(10) / ATR(50)
 
-    ratio ≈ 1.0  →  la volatilidad reciente es la normal del activo
-    ratio < 0.7  →  el activo está MUCHO más quieto que lo habitual (compresión)
+    ratio ≈ 1.0   →  la volatilidad reciente es la normal del activo
+    ratio < 0.83  →  el activo está MUCHO más quieto que lo habitual
+
+Cómo se eligió el 0.83 (importa, para que nadie lo toque a ciegas)
+-------------------------------------------------------------------
+NO se eligió por rentabilidad. Se eligió por PERCENTIL: medido sobre las
+33.407 velas de Data_Leo, la mediana del ratio es 0.988 y el percentil 10
+es 0.828. O sea, 0.83 selecciona aproximadamente el 10% de velas más
+quietas — que es exactamente lo que la estrategia dice buscar.
+
+Calibrarlo por percentil y no por resultados evita el autoengaño de
+ajustar el umbral hasta que el backtest dé lindo.
+
+Ojo si cambiás el suavizado del ATR: el umbral original era 0.70, elegido
+cuando el ATR se calculaba como media simple. Al pasarlo al suavizado de
+Wilder (que es mucho más estable) ese 0.70 pasó a seleccionar el 1,15% de
+las velas y la estrategia casi dejó de operar. El umbral y el método de
+cálculo del ATR van atados.
 
 Se mide sobre el buffer SIN incluir la vela actual: lo que interesa es que
 veníamos comprimidos y que HOY rompe. Si se incluyera la vela de ruptura
@@ -80,7 +96,7 @@ from signal_provider import SignalProvider
 # ── Parámetros de la estrategia ───────────────────────────────────────────────
 ATR_CORTO:         int   = 10     # volatilidad reciente
 ATR_LARGO:         int   = 50     # volatilidad "normal" del activo
-RATIO_COMPRESION:  float = 0.70   # por debajo de esto se considera comprimido
+RATIO_COMPRESION:  float = 0.83   # por debajo de esto se considera comprimido
 RUPTURA_VELAS:     int   = 20     # ventana del máximo a romper
 CHANDELIER_ATR:    float = 3.0    # distancia del trailing stop, en ATR
 TIME_STOP_VELAS:   int   = 100    # máximo de velas en posición
@@ -147,22 +163,67 @@ class CompresionVolatilidadStrategy(SignalProvider):
         if candles_held >= TIME_STOP_VELAS:
             return "TIME_STOP"
 
-        actual = fifo[-1]
-
-        atr_actual = atr(fifo, period=ATR_CORTO)
-        if atr_actual is None:
+        nivel_stop = self._nivel_chandelier(fifo, candles_held)
+        if nivel_stop is None:
             return None
 
-        # ── Máximo alcanzado desde la entrada ─────────────────────────────────
-        # candles_held=0 significa que todavía no pasó ninguna vela completa
-        # en posición; el max(..., 1) evita que list[-0:] devuelva el buffer
-        # entero, que daría un máximo histórico en vez del de la operación.
-        velas_en_posicion = list(fifo)[-max(candles_held, 1):]
-        maximo_alcanzado = max(c.high for c in velas_en_posicion)
-
-        nivel_stop = maximo_alcanzado - (CHANDELIER_ATR * atr_actual)
-
-        if actual.close < nivel_stop:
+        if fifo[-1].close < nivel_stop:
             return "CHANDELIER_STOP"
 
         return None
+
+    # ── Cálculo del trailing stop ─────────────────────────────────────────────
+
+    @staticmethod
+    def _nivel_chandelier(fifo: deque, candles_held: int) -> Optional[float]:
+        """
+        Nivel del chandelier stop: el MÁS ALTO que alcanzó desde la entrada.
+
+        El trinquete es la parte que importa. Calcular el nivel como
+        `máximo − 3×ATR` con el ATR de hoy NO es un trinquete: cuando la
+        volatilidad sube, el ATR crece y el nivel se hunde justo en el peor
+        momento. Medido sobre datos reales, esa versión bajaba el stop en el
+        42% de las velas, con retrocesos de hasta 5,3% en una sola vela.
+
+        Acá se reconstruye el nivel que hubo en CADA vela desde la entrada y
+        se devuelve el máximo: así solo puede subir, que es lo que un
+        trailing stop promete.
+
+        El ATR se calcula de forma incremental en una sola pasada (el
+        suavizado de Wilder es recursivo), así que el costo es el mismo que
+        el de una única llamada a `atr()`.
+
+        Retorna None si todavía no hay historia suficiente.
+        """
+        velas = list(fifo)
+        n = len(velas)
+
+        true_ranges = [
+            max(c.high - c.low, abs(c.high - p.close), abs(c.low - p.close))
+            for p, c in zip(velas, velas[1:])
+        ]
+        if len(true_ranges) < ATR_CORTO:
+            return None
+
+        # ATR de Wilder vela por vela. El primer valor corresponde al índice
+        # ATR_CORTO de `velas` (necesita ATR_CORTO True Ranges previos).
+        atr_val = sum(true_ranges[:ATR_CORTO]) / ATR_CORTO
+        atr_por_vela = {ATR_CORTO: atr_val}
+        for idx, tr in enumerate(true_ranges[ATR_CORTO:], start=ATR_CORTO + 1):
+            atr_val = (atr_val * (ATR_CORTO - 1) + tr) / ATR_CORTO
+            atr_por_vela[idx] = atr_val
+
+        # candles_held vale 1 en la vela de entrada (el motor lo incrementa
+        # antes de llamar a check_exit), así que -candles_held apunta a ella.
+        inicio = max(n - max(candles_held, 1), 0)
+
+        maximo = float("-inf")
+        nivel = float("-inf")
+        for j in range(inicio, n):
+            maximo = max(maximo, velas[j].high)
+            atr_j = atr_por_vela.get(j)
+            if atr_j is None:
+                continue   # vela anterior al calentamiento del ATR
+            nivel = max(nivel, maximo - CHANDELIER_ATR * atr_j)
+
+        return None if nivel == float("-inf") else nivel
