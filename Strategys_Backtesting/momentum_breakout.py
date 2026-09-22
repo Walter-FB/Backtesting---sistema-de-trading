@@ -36,7 +36,6 @@ from typing import Optional
 
 from analysis import MarketRegime
 from signal_provider import SignalProvider
-from .connors_rsi2 import RiskManager  # import relativo dentro del paquete
 
 
 # ── Parámetros de la estrategia ───────────────────────────────────────────────
@@ -45,9 +44,6 @@ HIGHER_HIGH_PERIOD:       int   = 60    # días para el filtro estructural de m�
 TRAILING_STOP_PERIOD:     int   = 20    # días para el trailing stop de mínimos (ampliado de 10)
 TIME_STOP_CANDLES:        int   = 60    # válvula de seguridad: máximo de velas en posición
 
-# Sizing idéntico al RSI2 — reutiliza los mismos parámetros de riesgo
-MOMENTUM_RISK_PCT:       float = 0.01  # 1% del capital por trade
-MOMENTUM_ATR_MULTIPLIER: float = 2.0   # stop = 2 × ATR bajo el precio de entrada
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -66,6 +62,18 @@ class MomentumBreakoutStrategy(SignalProvider):
     No guarda estado entre llamadas salvo el trailing stop mínimo interno,
     que se recalcula en cada vela desde el FIFO.
     """
+
+
+    PARAMETROS = {
+        "higher_high": {"default": HIGHER_HIGH_PERIOD, "min": 10, "max": 200, "step": 1,
+                        "ayuda": "Velas del máximo estructural que hay que superar"},
+        "donchian":    {"default": DONCHIAN_BREAKOUT_PERIOD, "min": 5, "max": 100, "step": 1,
+                        "ayuda": "Velas del canal de Donchian (disparo)"},
+        "trailing":    {"default": TRAILING_STOP_PERIOD, "min": 3, "max": 100, "step": 1,
+                        "ayuda": "Sale si el cierre pierde el mínimo de estas velas"},
+        "time_stop":   {"default": TIME_STOP_CANDLES, "min": 1, "max": 300, "step": 1,
+                        "ayuda": "Máximo de velas en posición"},
+    }
 
     def check_entry(
         self,
@@ -91,7 +99,7 @@ class MomentumBreakoutStrategy(SignalProvider):
 
         # ── Guardia: necesitamos al menos 61 velas para los cálculos ──────────
         # 60 para el Higher High + 1 para la vela actual
-        if len(fifo) < HIGHER_HIGH_PERIOD + 1:
+        if len(fifo) < self.p["higher_high"] + 1:
             return False
 
         current = fifo[-1]
@@ -101,7 +109,7 @@ class MomentumBreakoutStrategy(SignalProvider):
 
         # ── Condición 2: Higher High de 60 días ───────────────────────────────
         # El cierre actual supera el máximo de los últimos 60 días (sin incluir hoy)
-        highs_last_60 = [c.high for c in fifo_list[-(HIGHER_HIGH_PERIOD + 1):-1]]
+        highs_last_60 = [c.high for c in fifo_list[-(self.p["higher_high"] + 1):-1]]
         if not highs_last_60:
             return False
         max_high_60_days = max(highs_last_60)
@@ -112,7 +120,7 @@ class MomentumBreakoutStrategy(SignalProvider):
         # ── Condición 3: Donchian Breakout de 20 días ─────────────────────────
         # El cierre actual supera el máximo de los últimos 20 días (sin incluir hoy)
         # Nota: ya implícito en Higher High 60, pero se verifica para legibilidad
-        highs_last_20 = [c.high for c in fifo_list[-(DONCHIAN_BREAKOUT_PERIOD + 1):-1]]
+        highs_last_20 = [c.high for c in fifo_list[-(self.p["donchian"] + 1):-1]]
         if not highs_last_20:
             return False
         donchian_upper = max(highs_last_20)
@@ -141,18 +149,18 @@ class MomentumBreakoutStrategy(SignalProvider):
             return "TIME_STOP"
 
         # ── Time-stop: válvula de seguridad ───────────────────────────────────
-        if candles_held >= TIME_STOP_CANDLES:
+        if candles_held >= self.p["time_stop"]:
             return "TIME_STOP"
 
         # ── Trailing Stop: close < mínimo de los últimos 20 días ─────────────
-        if len(fifo) < TRAILING_STOP_PERIOD + 1:
+        if len(fifo) < self.p["trailing"] + 1:
             return None  # no hay suficiente historia — mantener
 
         fifo_list = list(fifo)
         current = fifo[-1]
 
         # Mínimo de los últimos 20 días (sin incluir la vela actual)
-        lows_last_10 = [c.low for c in fifo_list[-(TRAILING_STOP_PERIOD + 1):-1]]
+        lows_last_10 = [c.low for c in fifo_list[-(self.p["trailing"] + 1):-1]]
         trailing_stop_level = min(lows_last_10)
 
         if current.close < trailing_stop_level:

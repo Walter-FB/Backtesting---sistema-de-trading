@@ -1,12 +1,13 @@
 """
 _plantilla.py — Plantilla para Estrategias Nuevas
 ==================================================
-Copiá este archivo con otro nombre (ej. mi_estrategia.py), completá
-check_entry y check_exit, registralo en strategy_factory.py y encendelo.
-Los 4 pasos completos están en GUIA.md → "Cómo enchufar una estrategia nueva".
+Copiá este archivo con otro nombre (ej. mi_estrategia.py) dentro de esta
+misma carpeta y completá check_entry y check_exit. Eso es todo: el sistema
+la descubre sola por el nombre del archivo, no hay que registrarla en
+ningún lado. Los detalles están en GUIA.md → "Cómo enchufar una estrategia nueva".
 
-Este archivo NO está registrado en el factory a propósito: es una plantilla,
-no una estrategia activa. La lógica de ejemplo que trae abajo funciona y se
+Este archivo se ignora a propósito porque empieza con guión bajo: es una
+plantilla, no una estrategia activa. La lógica de ejemplo que trae abajo funciona y se
 puede correr tal cual (RSI sobrevendido + precio sobre la EMA(50)), pero está
 para mostrar cómo se usa el toolkit de indicadores, no como estrategia seria.
 
@@ -30,8 +31,9 @@ from signal_provider import SignalProvider
 
 
 # ── Parámetros de la estrategia ───────────────────────────────────────────────
-# Sacalos siempre a constantes acá arriba: así probás variantes cambiando
-# un número, sin tocar la lógica.
+# Los valores por defecto viven acá. Las perillas que quieras poder mover desde
+# el dashboard (o desde el código, sin editar el archivo) se declaran en
+# PARAMETROS, dentro de la clase, y se leen con self.p["nombre"].
 RSI_PERIODO:       int   = 14
 RSI_SOBREVENTA:    float = 30.0
 RSI_SALIDA:        float = 55.0
@@ -45,6 +47,20 @@ class PlantillaStrategy(SignalProvider):
     precio sigue por encima de su EMA(50) — es decir, un retroceso dentro
     de una tendencia sana, no una caída libre.
     """
+
+
+    PARAMETROS = {
+        "rsi_periodo":    {"default": RSI_PERIODO, "min": 2, "max": 50, "step": 1,
+                           "ayuda": "Período del RSI"},
+        "rsi_sobreventa": {"default": RSI_SOBREVENTA, "min": 5.0, "max": 60.0, "step": 1.0,
+                           "ayuda": "Entra con el RSI por debajo de este valor"},
+        "rsi_salida":     {"default": RSI_SALIDA, "min": 30.0, "max": 95.0, "step": 1.0,
+                           "ayuda": "Sale con el RSI por encima de este valor"},
+        "ema_tendencia":  {"default": EMA_TENDENCIA, "min": 5, "max": 200, "step": 1,
+                           "ayuda": "El precio tiene que estar sobre esta EMA para entrar"},
+        "time_stop":      {"default": TIME_STOP_VELAS, "min": 1, "max": 200, "step": 1,
+                           "ayuda": "Máximo de velas en posición"},
+    }
 
     def check_entry(
         self,
@@ -64,7 +80,7 @@ class PlantillaStrategy(SignalProvider):
         bullish_bias : True si el precio está sobre la EMA(200), False si no,
                        None si todavía no hay dato
         """
-        if len(fifo) < EMA_TENDENCIA:
+        if len(fifo) < self.p["ema_tendencia"]:
             return False   # todavía no hay historia suficiente
 
         current = fifo[-1]
@@ -74,14 +90,14 @@ class PlantillaStrategy(SignalProvider):
             return False
 
         # ── Indicadores del toolkit (se calculan desde el buffer, sin futuro) ──
-        rsi_actual = rsi(fifo, period=RSI_PERIODO)
-        ema_actual = ema(fifo, period=EMA_TENDENCIA)
+        rsi_actual = rsi(fifo, period=self.p["rsi_periodo"])
+        ema_actual = ema(fifo, period=self.p["ema_tendencia"])
 
         if rsi_actual is None or ema_actual is None:
             return False
 
         # ── Condición 1: RSI sobrevendido ─────────────────────────────────────
-        if rsi_actual >= RSI_SOBREVENTA:
+        if rsi_actual >= self.p["rsi_sobreventa"]:
             return False
 
         # ── Condición 2: el precio aguanta sobre su EMA(50) ───────────────────
@@ -108,12 +124,12 @@ class PlantillaStrategy(SignalProvider):
             return "TIME_STOP"
 
         # ── Válvula de seguridad: no quedarse atrapado para siempre ───────────
-        if candles_held >= TIME_STOP_VELAS:
+        if candles_held >= self.p["time_stop"]:
             return "TIME_STOP"
 
         # ── Target: el RSI se recuperó ────────────────────────────────────────
-        rsi_actual = rsi(fifo, period=RSI_PERIODO)
-        if rsi_actual is not None and rsi_actual > RSI_SALIDA:
+        rsi_actual = rsi(fifo, period=self.p["rsi_periodo"])
+        if rsi_actual is not None and rsi_actual > self.p["rsi_salida"]:
             return "RSI_TARGET"
 
         return None

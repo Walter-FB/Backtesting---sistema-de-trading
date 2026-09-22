@@ -40,7 +40,7 @@ from analysis import MarketRegime
 from climate_factory import ClimateFactory
 from climate_provider import ClimateProvider, ClimateReading
 from signal_provider import SignalProvider
-from Strategys_Backtesting.connors_rsi2 import RiskManager
+from risk_manager import RiskManager
 from data_loader import JSONDataLoader
 from models import Candle
 from pronostico_del_clima import compute_and_set_indicators
@@ -115,6 +115,8 @@ class TradingEngine:
         strategy: SignalProvider,
         climate_provider: Optional[ClimateProvider] = None,
         initial_balance: float = 100_000.0,
+        commission_pct: float = COMMISSION_PCT,
+        risk_manager: Optional[RiskManager] = None,
     ) -> None:
         # ── Buffer circular ───────────────────────────────────────────────────
         self.fifo_buffer: deque = deque(maxlen=FIFO_MAX_LEN)
@@ -131,10 +133,15 @@ class TradingEngine:
         # ── Módulo de estrategia (inyectado) ──────────────────────────────────
         # El motor no sabe qué estrategia es — solo que cumple SignalProvider.
         self.strategy:     SignalProvider = strategy
-        self.risk_manager: RiskManager  = RiskManager()
+        self.risk_manager: RiskManager  = risk_manager or RiskManager()
+
+        # ── Comisión ──────────────────────────────────────────────────────────
+        # Por lado. Binance spot cobra 0,1% (0,075% pagando con BNB); con un
+        # scalper que captura 0,15% por operación, este número decide todo.
+        self.commission_pct: float = commission_pct
 
         # ── Módulo de tracking ────────────────────────────────────────────────
-        self.tracker: TradeTracker = TradeTracker(output_dir=".")
+        self.tracker: TradeTracker = TradeTracker(output_dir=".", commission_pct=commission_pct)
 
         # ── Estado de posición y señales pendientes ───────────────────────────
         self.current_position:     Optional[Position] = None
@@ -152,7 +159,7 @@ class TradingEngine:
             f"Clima: {type(self.climate_provider).__name__} | "
             f"Buffer FIFO maxlen={FIFO_MAX_LEN} | "
             f"Balance inicial: ${self.balance:,.2f} | "
-            f"Comisión: {COMMISSION_PCT*100:.1f}% por lado"
+            f"Comisión: {self.commission_pct*100:.2f}% por lado"
         )
 
     # ── Backtest principal ────────────────────────────────────────────────────
@@ -203,7 +210,7 @@ class TradingEngine:
         print(f"\n{_B}{'═'*72}{_R}")
         print(f"  {_B}⚡ SISTEMA DE TRADING — BACKTEST{_R}")
         print(f"  {_DIM}{ticker}  │  {total_str}  │  Buffer FIFO maxlen={FIFO_MAX_LEN}{_R}")
-        print(f"  {_DIM}Estrategia: {type(self.strategy).__name__}  │  Comisión: {COMMISSION_PCT*100:.1f}% por lado{_R}")
+        print(f"  {_DIM}Estrategia: {type(self.strategy).__name__}  │  Comisión: {self.commission_pct*100:.2f}% por lado{_R}")
         print(f"{_B}{'═'*72}{_R}\n")
 
         last_candle: Optional[Candle] = None
@@ -321,7 +328,7 @@ class TradingEngine:
         qty  = self.risk_manager.compute_quantity(
             self._signal_balance, self._signal_atr, price=candle.open,
         )
-        cost = candle.open * qty * (1 + COMMISSION_PCT)
+        cost = candle.open * qty * (1 + self.commission_pct)
 
         if qty <= 0 or cost > self.balance:
             # Señal descartada. Se loguea en vez de desaparecer en silencio:
@@ -370,7 +377,7 @@ class TradingEngine:
             return
 
         exit_price = candle.close if use_close else candle.open
-        proceeds   = exit_price * self.current_position.quantity * (1 - COMMISSION_PCT)
+        proceeds   = exit_price * self.current_position.quantity * (1 - self.commission_pct)
         self.balance += proceeds
 
         trade = self.tracker.record_trade(

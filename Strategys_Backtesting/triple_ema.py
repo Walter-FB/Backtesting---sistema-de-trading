@@ -85,6 +85,14 @@ class TripleEMAStrategy(SignalProvider):
 
     # ── ENTRADA ───────────────────────────────────────────────────────────────
 
+
+    PARAMETROS = {
+        "ema_gatillo": {"default": EMA_GATILLO, "min": 3, "max": 50, "step": 1,
+                        "ayuda": "Período de la EMA rápida que dispara la entrada"},
+        "time_stop":   {"default": TIME_STOP_VELAS, "min": 1, "max": 300, "step": 1,
+                        "ayuda": "Máximo de velas en posición"},
+    }
+
     def check_entry(
         self,
         fifo: deque,
@@ -114,8 +122,8 @@ class TripleEMAStrategy(SignalProvider):
             return False
 
         # ── Condición 3 (disparo): cruce al alza de la EMA(12) sobre la EMA(50)
-        gatillo_hoy = ema(fifo, period=EMA_GATILLO)
-        gatillo_ayer = ema(list(fifo)[:-1], period=EMA_GATILLO)
+        gatillo_hoy = ema(fifo, period=self.p["ema_gatillo"])
+        gatillo_ayer = ema(list(fifo)[:-1], period=self.p["ema_gatillo"])
 
         if gatillo_hoy is None or gatillo_ayer is None:
             return False
@@ -140,7 +148,7 @@ class TripleEMAStrategy(SignalProvider):
             return "TIME_STOP"
 
         # ── Válvula de seguridad ──────────────────────────────────────────────
-        if candles_held >= TIME_STOP_VELAS:
+        if candles_held >= self.p["time_stop"]:
             return "TIME_STOP"
 
         actual = fifo[-1]
@@ -159,8 +167,8 @@ class TripleEMAStrategy(SignalProvider):
             return None
 
         # ── Salida por pérdida de impulso: cruce bajista de la rápida ─────────
-        gatillo_hoy = ema(fifo, period=EMA_GATILLO)
-        gatillo_ayer = ema(list(fifo)[:-1], period=EMA_GATILLO)
+        gatillo_hoy = ema(fifo, period=self.p["ema_gatillo"])
+        gatillo_ayer = ema(list(fifo)[:-1], period=self.p["ema_gatillo"])
 
         if gatillo_hoy is None or gatillo_ayer is None:
             return None

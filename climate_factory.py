@@ -32,7 +32,7 @@ CLIMATE_REGISTRY: dict[str, type[ClimateProvider]] = {
 # MultiTimeframeClimate (leer el clima en diaria mientras se opera en 1m) no
 # entra en este registro porque necesita las velas del timeframe superior en
 # su constructor. Se construye a mano y se le pasa al engine igual que
-# cualquier otro clima — ver GUIA.md § 9.
+# cualquier otro clima — ver GUIA.md § 10.
 
 DEFAULT_CLIMATE: str = "clasico_adx_ema200"
 

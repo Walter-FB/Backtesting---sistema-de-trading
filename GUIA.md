@@ -28,7 +28,7 @@ Cómo se garantiza acá:
 - Cuando tu estrategia dice "entrar", el motor no compra: **anota la intención**. En la vuelta siguiente del loop compra al `open` de esa vela nueva.
 - Cada operación paga **0,1% de comisión por lado** (entrada y salida), como en la vida real.
 
-La misma regla se aplica **entre timeframes** — ver sección 9, que es donde más gente se resbala.
+La misma regla se aplica **entre timeframes** — ver sección 10, que es donde más gente se resbala.
 
 ---
 
@@ -74,7 +74,7 @@ El motor no sabe nada de estrategias, ni de indicadores, ni de mercados. Solo or
 | **Estrategia** | `signal_provider.py` | `Strategys_Backtesting/` | `strategy_factory.py` |
 | **Clima** | `climate_provider.py` | `Climas_Backtesting/` | `climate_factory.py` |
 | **Datos** | — | `data_loader.py` (JSON), `crypto_data_loader.py` (exchange) | qué loader instanciás |
-| **Riesgo** | — | `RiskManager` en `Strategys_Backtesting/connors_rsi2.py` | parámetros al construirlo |
+| **Riesgo** | — | `risk_manager.py` | parámetros al construirlo (o desde el panel) |
 
 Estrategia y clima son simétricos: mismo patrón, misma forma de agregar cosas nuevas. Si aprendés a agregar una, sabés agregar la otra.
 
@@ -82,7 +82,7 @@ Estrategia y clima son simétricos: mismo patrón, misma forma de agregar cosas 
 
 ## 5. Las estrategias incluidas
 
-Seis estrategias de cuatro familias distintas. La familia importa más que los parámetros: dos estrategias de la misma familia tienden a ganar y perder en los mismos momentos, así que tener variedad real es lo que hace que el desglose por clima diga algo.
+Siete estrategias de cinco familias distintas. La familia importa más que los parámetros: dos estrategias de la misma familia tienden a ganar y perder en los mismos momentos, así que tener variedad real es lo que hace que el desglose por clima diga algo.
 
 | Nombre en el registro | Familia | Qué compra |
 |---|---|---|
@@ -92,6 +92,7 @@ Seis estrategias de cuatro familias distintas. La familia importa más que los p
 | `triple_ema` | Tendencia | Alineación de EMA(12) > EMA(50) > EMA(200) |
 | `momentum_breakout` | Ruptura | Máximos de 60 velas, con régimen tendencial confirmado |
 | `compresion_volatilidad` | Régimen de volatilidad | Rupturas después de que el activo se aquietó |
+| `tp_sl_fijo` | Salida por precio | Retrocesos de RSI, con take profit y stop loss fijos en % |
 
 ### `triple_ema` — Alineación de tres medias
 
@@ -111,6 +112,16 @@ No opera dirección, opera **cambio de régimen de volatilidad**. Cuando un acti
 - **Entra** cuando, viniendo comprimido, el cierre supera el máximo de las últimas 20 velas.
 - **Sale** por *chandelier stop*: un trailing stop anclado 3×ATR por debajo del máximo alcanzado desde la entrada. Sube con el precio, nunca baja.
 - **Parámetros**: `ATR_CORTO=10`, `ATR_LARGO=50`, `RATIO_COMPRESION=0.83`, `RUPTURA_VELAS=20`, `CHANDELIER_ATR=3.0`, `TIME_STOP_VELAS=100`.
+
+### `tp_sl_fijo` — Take profit y stop loss en porcentaje
+
+La que piensa como un trader: "gano X%, pierdo Y%". Las otras seis salen por **condición** (un cruce, un nivel de RSI); esta sale por **precio**. Es la más fácil de razonar, la más fácil de comparar contra un robot comercial, y la que tiene más perillas para mover desde el panel.
+
+- **Entra** (a propósito simple: el foco es la salida) con el RSI(14) por debajo de `rsi_entrada`, opcionalmente solo sobre la EMA(200).
+- **Sale** por `STOP_LOSS`, `TAKE_PROFIT` o `TIME_STOP`, todos en porcentaje sobre el precio de entrada.
+- **Perillas**: `take_profit_pct=2.0`, `stop_loss_pct=1.0`, `rsi_entrada=30`, `solo_sobre_ema200=True`, `time_stop=50`.
+
+Dos cosas para leer sus resultados. Primero, **el stop se evalúa al cierre de la vela, no intravela**: con el stop en 1%, sobre `Data_Leo` el SL efectivo fue **−2,01%** y la peor operación **−7,8%** — el precio abre con gap, el sistema recién lo ve al cierre. Es la demostración más concreta de la limitación que se explica en la sección 14. Segundo, es la única estrategia donde el "R" del reporte se parece a una unidad de riesgo, porque tiene un stop de verdad.
 
 ### `pullback_tendencia` — Retroceso con confirmación
 
@@ -134,6 +145,7 @@ Corridas sobre los 13 activos de `Data_Leo/`, velas diarias, capital de $100.000
 | `compresion_volatilidad` | 134 | 42,5% | **+0,205R** | +$26.737 |
 | `momentum_breakout` | 203 | 42,9% | +0,111R | +$21.286 |
 | `connors_rsi2` | 269 | 63,6% | +0,024R | +$6.156 |
+| `tp_sl_fijo` | 51 | 60,8% | +0,199R | +$10.173 |
 | `pullback_tendencia` | 214 | 29,4% | −0,015R | −$3.388 |
 
 **Cómo leer esta tabla, que es más interesante de lo que parece:**
@@ -159,15 +171,38 @@ La lección vale más que los números: **el +0,570R de `momentum_breakout` era 
 
 ---
 
-## 6. Cómo enchufar una estrategia nueva
+## 6. El panel
 
-Cuatro pasos. Hay una plantilla lista para copiar en `Strategys_Backtesting/_plantilla.py`.
+```bash
+streamlit run dashboard.py
+```
+
+Se abre en el navegador. A la izquierda elegís los activos, la estrategia, el clima, la comisión y el riesgo; movés las perillas de la estrategia; apretás **Correr**. A la derecha aparece:
+
+- **Seis indicadores**: PnL, retorno, expectancy, win rate, drawdown y **comisiones / bruto** — qué porcentaje de lo que la estrategia gana se va en comisiones. Es el número que le dice a un scalper si está jugando a cero: por debajo del 20% es sano; por encima del 50% las comisiones se comen la estrategia, y el panel lo dice en rojo.
+- **La curva de capital**, una línea por activo (con más de ocho, la cartera completa).
+- **Por clima**: en qué estado del mercado nacen las operaciones que ganan y las que pierden.
+- **Operaciones** y **motivos de salida**, en tablas.
+
+Marcando **"Comparar todas las estrategias"** corre las siete sobre los mismos datos y las pone lado a lado, con su TP y SL efectivos (la mediana del % ganado y perdido por operación).
+
+Las perillas salen solas de la declaración `PARAMETROS` de cada estrategia (sección 7): agregar una perilla en el archivo la hace aparecer en el panel sin tocar nada más. Los resultados se cachean, así que volver a una configuración ya corrida es instantáneo.
+
+Lo que el panel **no** hace todavía: leer velas de 1 minuto (solo JSON diario; la entrada SQLite está pendiente) ni mostrar el multi-timeframe.
+
+---
+
+## 7. Cómo enchufar una estrategia nueva
+
+Dos pasos. No hay que registrar nada: el sistema descubre sola cualquier estrategia que esté en la carpeta.
 
 ### Paso 1 — Copiar la plantilla
 
 ```bash
 cp Strategys_Backtesting/_plantilla.py Strategys_Backtesting/mi_estrategia.py
 ```
+
+El nombre del archivo es el nombre de la estrategia: `mi_estrategia.py` aparece como `mi_estrategia` en el panel y en los runners. Los archivos que empiezan con guión bajo se ignoran (por eso la plantilla no aparece).
 
 ### Paso 2 — Escribir las dos reglas
 
@@ -191,53 +226,46 @@ Lo que tenés disponible adentro:
 
 - `fifo[-1]` — la vela actual (`.open`, `.high`, `.low`, `.close`, `.volume`, más los indicadores del proveedor: `.rsi`, `.ema_20/50/100/200`, `.macd_line`, `.bb_upper/mid/lower`, y los que calcula el motor: `.rsi_2`, `.atr_14`, `.adx_14`).
 - `fifo[-2]`, `fifo[-3]`... — las velas anteriores, hasta 250.
-- El **toolkit de indicadores** (sección 8) para calcular cualquier otra cosa.
+- El **toolkit de indicadores** (sección 9) para calcular cualquier otra cosa.
 - `bullish_bias` — `True` si el precio está sobre la EMA(200).
-- `candles_held` — cuántas velas lleva abierta la posición.
-- `regime` — el clima clásico como Enum (ver sección 7 sobre cuándo es `None`).
+- `candles_held` — cuántas velas lleva abierta la posición (vale 1 en la vela de entrada).
+- `regime` — el clima clásico como Enum (ver sección 8 sobre cuándo es `None`).
 
-El texto que devuelvas en `check_exit` aparece agrupado en los reportes, así que poné nombres que sirvan para diagnosticar: `"RSI_TARGET"`, `"TRAILING_STOP"`, `"TIME_STOP"` dicen mucho más que `"salida1"`.
+El texto que devuelvas en `check_exit` aparece agrupado en los reportes, así que poné nombres que sirvan para diagnosticar: `"TAKE_PROFIT"`, `"TRAILING_STOP"`, `"TIME_STOP"` dicen mucho más que `"salida1"`.
 
 **Poné siempre un time-stop.** Sin él, una posición puede quedarse abierta para siempre esperando una condición que no llega.
 
-### Paso 3 — Registrarla
+### Perillas: parámetros que se mueven desde el panel
 
-Una línea en `strategy_factory.py`:
+Si querés que un umbral se pueda cambiar sin editar el archivo, declaralo en `PARAMETROS` dentro de la clase y leelo con `self.p[...]`:
 
 ```python
-from Strategys_Backtesting.mi_estrategia import MiEstrategia   # ← import
+class MiEstrategia(SignalProvider):
+    PARAMETROS = {
+        "rsi_entrada": {"default": 30.0, "min": 5.0, "max": 50.0, "step": 1.0,
+                        "ayuda": "Compra con el RSI por debajo de este valor"},
+        "time_stop":   {"default": 20, "min": 1, "max": 200, "step": 1},
+    }
 
-STRATEGY_REGISTRY: dict[str, type[SignalProvider]] = {
-    "connors_rsi2":           RSI2Strategy,
-    "momentum_breakout":      MomentumBreakoutStrategy,
-    "ema_crossover":          EMACrossoverStrategy,
-    "triple_ema":             TripleEMAStrategy,
-    "compresion_volatilidad": CompresionVolatilidadStrategy,
-    "pullback_tendencia":     PullbackTendenciaStrategy,
-    "mi_estrategia":          MiEstrategia,        # ← acá
-}
+    def check_entry(self, fifo, regime, bullish_bias):
+        if rsi(fifo, 14) < self.p["rsi_entrada"]:
+            ...
 ```
 
-### Paso 4 — Encenderla
+Con eso el panel muestra un control por perilla, y desde código podés hacer `StrategyFactory.create("mi_estrategia", rsi_entrada=25)`. Sin argumentos usa los defaults. Un nombre que no está declarado es un error a propósito: un typo no puede convertirse en un parámetro que no hace nada. Las siete estrategias incluidas están hechas así, y `_plantilla.py` muestra el patrón completo.
 
-En el runner que vayas a correr, cambiás el nombre:
+### Para correrla
+
+Aparece sola en el panel (`streamlit run dashboard.py`). En los runners de terminal se elige por nombre:
 
 ```python
 # en _test_run.py (acciones) o _test_run_cripto.py (cripto)
 STRATEGY_NAME: str = "mi_estrategia"
 ```
 
-Y corrés:
-
-```bash
-python _test_run_cripto.py
-```
-
-Eso es todo. No se toca el motor nunca.
-
 ---
 
-## 7. Cómo enchufar un pronóstico de clima nuevo
+## 8. Cómo enchufar un pronóstico de clima nuevo
 
 Mismo patrón, cuatro pasos iguales. Un clima responde una sola pregunta: **¿en qué estado está el mercado ahora?**
 
@@ -287,7 +315,7 @@ Leído: esta estrategia gana en volatilidad y lateral, y **pierde plata** en ten
 
 ---
 
-## 8. El toolkit de indicadores
+## 9. El toolkit de indicadores
 
 `indicators.py` — todas reciben el buffer FIFO y devuelven el valor de la vela actual (o `None` si todavía no hay historia suficiente). Ninguna mira el futuro.
 
@@ -338,7 +366,7 @@ La regla práctica: **si el indicador existe como campo del Candle, usá el camp
 
 ---
 
-## 9. Multi-timeframe: operar en 1m, leer el clima en diaria
+## 10. Multi-timeframe: operar en 1m, leer el clima en diaria
 
 Ejecutar en velas de 1 minuto pero decidir el contexto con velas diarias.
 
@@ -386,11 +414,11 @@ Es configurable a propósito — cambiá `htf_timeframe`, corré, y comparalo co
 8 años de BTC en 1m son **~4,2 millones de velas**. Dos consecuencias:
 
 - **No entran en memoria como lista.** Por eso `run_backtest()` acepta también un generador: las velas se procesan de a una y nunca existe la lista completa. El buffer FIFO solo necesita 250.
-- **JSON no sirve a esa escala** (~1 GB por símbolo). Para 1m hay que ir a Parquet o SQLite. El formato JSON actual está perfecto para diaria y 4h; para 1m falta implementar el almacenamiento (ver sección 13).
+- **JSON no sirve a esa escala** (~1 GB por símbolo). Para 1m hay que ir a Parquet o SQLite. El formato JSON actual está perfecto para diaria y 4h; para 1m falta implementar el almacenamiento (ver sección 14).
 
 ---
 
-## 10. Cómo leer el reporte
+## 11. Cómo leer el reporte
 
 Un repaso rápido de qué significa cada número, y cuál importa de verdad.
 
@@ -412,17 +440,26 @@ Consecuencia: las pérdidas no están acotadas en −1R. Sobre `Data_Leo` el ran
 
 La lectura correcta es otra, y es igual de útil: como R = 1% del balance, **el R-múltiplo es el porcentaje de la cuenta ganado o perdido en esa operación**. Una expectancy de +0,579R significa "+0,58% de la cuenta por operación promedio". Sirve perfecto para comparar estrategias entre sí (el divisor es idéntico para todas), pero no lo leas como "gané 0,58 veces lo que arriesgué".
 
+### La comisión y el "comisiones / bruto"
+
+La comisión por lado es un parámetro (`TradingEngine(commission_pct=...)`, o el control del panel). El default es 0,1%; Binance spot cobra 0,075% pagando con BNB. Como se cobra al entrar y al salir, el costo de ida y vuelta es el doble.
+
+El reporte muestra **qué porcentaje de la ganancia bruta se va en comisiones**. Es la métrica que ninguna otra resume: un sistema que captura 0,15% por operación y paga 0,14% tiene este número en 93%, y no hay entrada mejor que lo salve — el arreglo es capturar movimientos más grandes. Sobre `Data_Leo`: `ema_crossover` 3,4%, `connors_rsi2` 17,3%.
+
 ### El tope de exposición
 
 Sin tope, esa misma fórmula compromete una porción enorme del capital: medido sobre `Data_Leo` daba **25,9% del capital por operación en promedio, con picos de 55,2%**, mientras el sistema anunciaba arriesgar 1%. Por eso existe `MAX_POSITION_PCT` (25% por defecto), que acota el nocional. Se activa seguido — en `compresion_volatilidad` limita el 60% de los dimensionamientos — así que si lo cambiás, los resultados se mueven.
 
 ---
 
-## 11. Comandos
+## 12. Comandos
 
 ```bash
 # Instalar dependencias
 pip install -r requirements.txt
+
+# El panel visual
+streamlit run dashboard.py
 
 # Backtest de un activo (acciones, menú interactivo)
 python engine.py
@@ -437,13 +474,14 @@ python _test_run_cripto.py
 python tests/test_multi_timeframe.py    # alineación entre timeframes
 python tests/test_indicadores.py        # matemática de RSI / ATR / ADX
 python tests/test_estado_y_riesgo.py    # estado, sizing y pipeline de datos
+python tests/test_estrategias.py        # descubrimiento, perillas, TP/SL y comisión
 ```
 
 Salidas que genera: `trades_history.csv` (una fila por operación, con su clima), `backtest_report.txt` (reporte completo), y el resumen a color en la terminal.
 
 ---
 
-## 12. Mapa de archivos
+## 13. Mapa de archivos
 
 ```
   CONTRATOS (definen las formas, no hacen nada)
@@ -451,19 +489,20 @@ Salidas que genera: `trades_history.csv` (una fila por operación, con su clima)
     climate_provider.py      ← qué debe cumplir un clima
     models.py                ← la clase Candle
 
-  REGISTROS (dónde se enchufa lo nuevo)
-    strategy_factory.py      ← registro de estrategias
+  DESCUBRIMIENTO (nada que registrar a mano)
+    strategy_factory.py      ← descubre las estrategias de la carpeta
     climate_factory.py       ← registro de climas
 
   PIEZAS INTERCAMBIABLES
     Strategys_Backtesting/   ← estrategias
       _plantilla.py              plantilla para copiar
-      connors_rsi2.py            reversión a la media (+ el RiskManager)
+      connors_rsi2.py            reversión a la media
       pullback_tendencia.py      retroceso en tendencia con confirmación
       ema_crossover.py           cruce EMA(20)/EMA(50)
       triple_ema.py              alineación EMA 200/50/12
       momentum_breakout.py       ruptura de máximos de 60 velas
       compresion_volatilidad.py  ruptura tras compresión de volatilidad
+      tp_sl_fijo.py              take profit y stop loss fijos en %
     Climas_Backtesting/      ← climas
       clasico_adx_ema200.py      el de siempre (ADX + EMA200)
       sin_clima.py               neutro, para estrategias sin filtro
@@ -471,6 +510,8 @@ Salidas que genera: `trades_history.csv` (una fila por operación, con su clima)
 
   MOTOR Y HERRAMIENTAS
     engine.py                ← el loop. Orquesta, no decide
+    risk_manager.py          ← cuánto comprar en cada operación
+    dashboard.py             ← el panel (streamlit)
     indicators.py            ← toolkit de indicadores
     pronostico_del_clima.py  ← cálculo de RSI(2)/ATR/ADX + detector clásico
     tracker_positions.py     ← registro de operaciones y métricas
@@ -489,11 +530,12 @@ Salidas que genera: `trades_history.csv` (una fila por operación, con su clima)
       test_multi_timeframe.py   alineación entre timeframes
       test_indicadores.py       matemática de los indicadores
       test_estado_y_riesgo.py   estado, sizing y pipeline de datos
+      test_estrategias.py       descubrimiento, perillas, TP/SL y comisión
 ```
 
 ---
 
-## 13. Límites conocidos
+## 14. Límites conocidos
 
 Lo que el sistema **todavía no hace**, para que nadie se lleve una sorpresa:
 
@@ -506,4 +548,4 @@ Lo que el sistema **todavía no hace**, para que nadie se lleve una sorpresa:
 - **Sin financiamiento ni fondeo.** No modela funding rates de perpetuos.
 - **1m todavía no tiene almacenamiento propio.** Falta el loader de Parquet/SQLite y la descarga bulk desde `data.binance.vision` (la API REST pagina de a 1000 velas: bajar 8 años de 1m son ~4.200 requests).
 - **Historia real disponible en Binance:** BTC/USDT desde agosto 2017 (~8 años), ADA desde 2018, SOL desde agosto 2020 (~5 años). No hay 10 años de cripto en Binance.
-- **Panel visual pendiente.** Está previsto en Streamlit, no construido todavía.
+- **El panel lee solo JSON diario.** La entrada SQLite para el 1m está pendiente, y el panel todavía no expone el clima multi-timeframe.

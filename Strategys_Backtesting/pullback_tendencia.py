@@ -111,6 +111,18 @@ class PullbackTendenciaStrategy(SignalProvider):
 
     # ── ENTRADA ───────────────────────────────────────────────────────────────
 
+
+    PARAMETROS = {
+        "rsi_retroceso":     {"default": RSI_RETROCESO, "min": 5.0, "max": 60.0, "step": 1.0,
+                              "ayuda": "Hubo retroceso si el RSI(14) bajó de este valor"},
+        "rsi_objetivo":      {"default": RSI_OBJETIVO, "min": 40.0, "max": 95.0, "step": 1.0,
+                              "ayuda": "Toma ganancia cuando el RSI(14) supera este valor"},
+        "ventana_retroceso": {"default": VENTANA_RETROCESO, "min": 1, "max": 30, "step": 1,
+                              "ayuda": "Cuántas velas atrás buscar el retroceso"},
+        "time_stop":         {"default": TIME_STOP_VELAS, "min": 1, "max": 200, "step": 1,
+                              "ayuda": "Máximo de velas en posición"},
+    }
+
     def check_entry(
         self,
         fifo: deque,
@@ -120,7 +132,7 @@ class PullbackTendenciaStrategy(SignalProvider):
         """
         Entra tras un retroceso, en la primera vela que confirma el giro.
         """
-        if len(fifo) < VENTANA_RETROCESO + 1:
+        if len(fifo) < self.p["ventana_retroceso"] + 1:
             return False
 
         actual = fifo[-1]
@@ -146,9 +158,9 @@ class PullbackTendenciaStrategy(SignalProvider):
             return False
 
         # ── Condición 2: hubo un retroceso reciente ───────────────────────────
-        recientes = list(fifo)[-VENTANA_RETROCESO:]
+        recientes = list(fifo)[-self.p["ventana_retroceso"]:]
         hubo_retroceso = any(
-            c.rsi is not None and c.rsi < RSI_RETROCESO for c in recientes
+            c.rsi is not None and c.rsi < self.p["rsi_retroceso"] for c in recientes
         )
         if not hubo_retroceso:
             return False
@@ -170,7 +182,7 @@ class PullbackTendenciaStrategy(SignalProvider):
             return "TIME_STOP"
 
         # ── Válvula de seguridad ──────────────────────────────────────────────
-        if candles_held >= TIME_STOP_VELAS:
+        if candles_held >= self.p["time_stop"]:
             return "TIME_STOP"
 
         actual = fifo[-1]
@@ -180,7 +192,7 @@ class PullbackTendenciaStrategy(SignalProvider):
             return "PERDIO_EMA50"
 
         # ── Target: el rebote maduró ──────────────────────────────────────────
-        if actual.rsi is not None and actual.rsi > RSI_OBJETIVO:
+        if actual.rsi is not None and actual.rsi > self.p["rsi_objetivo"]:
             return "RSI_OBJETIVO"
 
         return None

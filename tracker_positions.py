@@ -129,12 +129,11 @@ class TradeTracker:
     print_report(initial_balance)               → imprime reporte en terminal
     """
 
-    def __init__(self, output_dir: str = ".") -> None:
-        self.trades:       List[TradeRecord] = []
-        self.output_dir:   str               = output_dir
+    def __init__(self, output_dir: str = ".", commission_pct: float = COMMISSION_PCT) -> None:
+        self.trades:         List[TradeRecord] = []
+        self.output_dir:     str               = output_dir
+        self.commission_pct: float             = commission_pct
 
-        # Estado interno para drawdown
-        self._peak_balance: float       = 0.0
         self._equity_curve: List[float] = []
 
     # ── Actualización de equity ───────────────────────────────────────────────
@@ -149,8 +148,6 @@ class TradeTracker:
         balance : float — balance actual de la cuenta (después de cualquier trade)
         """
         self._equity_curve.append(balance)
-        if balance > self._peak_balance:
-            self._peak_balance = balance
 
     # ── Registro de trade cerrado ─────────────────────────────────────────────
 
@@ -182,8 +179,8 @@ class TradeTracker:
         gross_exit  = exit_price           * position.quantity
 
         # Comisión de 0.1% sobre cada lado
-        comm_entry = gross_entry * COMMISSION_PCT
-        comm_exit  = gross_exit  * COMMISSION_PCT
+        comm_entry = gross_entry * self.commission_pct
+        comm_exit  = gross_exit  * self.commission_pct
         commission = comm_entry + comm_exit
 
         # P&L
@@ -259,6 +256,15 @@ class TradeTracker:
         total_pnl    = sum(t.pnl_net for t in self.trades)
         total_return = (total_pnl / initial_balance) * 100
 
+        # Qué fracción de lo que la estrategia GANA se va en comisiones.
+        # Es el número que le dice a un scalper si está jugando a cero: si
+        # captura 0,15% por operación y paga 0,14%, este valor da ~93%.
+        comisiones_total = sum(t.commission for t in self.trades)
+        pnl_bruto_ganado = sum(t.pnl_gross for t in self.trades if t.pnl_gross > 0)
+        comisiones_pct_del_bruto = (
+            comisiones_total / pnl_bruto_ganado * 100 if pnl_bruto_ganado > 0 else float("inf")
+        )
+
         return {
             "total_trades":     total,
             "winners":          len(winners),
@@ -270,6 +276,8 @@ class TradeTracker:
             "total_pnl":        total_pnl,
             "total_return_pct": total_return,
             "max_drawdown_pct": self._compute_max_drawdown(),
+            "comisiones_total":          comisiones_total,
+            "comisiones_pct_del_bruto":  comisiones_pct_del_bruto,
             "by_climate":       self._compute_breakdown_by_climate(),
         }
 
@@ -423,7 +431,9 @@ class TradeTracker:
             f.write(f"  Capital inicial    : ${initial_balance:>12,.2f}\n")
             f.write(f"  PnL neto total     : ${pnl_sign}{perf['total_pnl']:>11,.2f}\n")
             f.write(f"  Retorno total      : {pnl_sign}{perf['total_return_pct']:>10.2f}%\n")
-            f.write(f"  Max Drawdown       :  {perf['max_drawdown_pct']:>10.2f}%\n\n")
+            f.write(f"  Max Drawdown       :  {perf['max_drawdown_pct']:>10.2f}%\n")
+            f.write(f"  Comisiones pagadas : ${perf['comisiones_total']:>12,.2f}\n")
+            f.write(f"  ...del bruto ganado:  {_fmt_pct_bruto(perf['comisiones_pct_del_bruto'])}\n\n")
 
             f.write("  ESTADÍSTICAS DE TRADES\n")
             f.write("  " + "-" * 40 + "\n")
@@ -527,6 +537,11 @@ class TradeTracker:
         print(f"  PnL neto total     : {pnl_col}{_B}${pnl_sign}{perf['total_pnl']:>11,.2f}{_R}")
         print(f"  Retorno total      : {pnl_col}{_B}{pnl_sign}{perf['total_return_pct']:>9.2f}%{_R}")
         print(f"  Max Drawdown       : {_RED}{perf['max_drawdown_pct']:>10.2f}%{_R}")
+        com_pct = perf['comisiones_pct_del_bruto']
+        com_col = _G if com_pct < 20 else _Y if com_pct < 50 else _RED
+        print(f"  Comisiones pagadas : {_B}${perf['comisiones_total']:>12,.2f}{_R}")
+        print(f"  ...del bruto ganado: {com_col}{_B}{_fmt_pct_bruto(com_pct):>11}{_R}   "
+              f"{_DIM}(<20% sano · >50% las comisiones se comen la estrategia){_R}")
 
         print(f"\n  {_B}ESTADÍSTICAS DE TRADES{_R}")
         print(f"  {'─'*40}")
@@ -574,3 +589,8 @@ class TradeTracker:
         print(f"  {_DIM}  → trades_history.csv{_R}")
         print(f"  {_DIM}  → backtest_report.txt{_R}")
         print(f"{_B}{'═'*65}{_R}\n")
+
+
+def _fmt_pct_bruto(valor: float) -> str:
+    """'inf' significa que no hubo ninguna operación ganadora contra la cual comparar."""
+    return "sin ganancias" if valor == float("inf") else f"{valor:.1f}%"

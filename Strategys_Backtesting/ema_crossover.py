@@ -32,6 +32,12 @@ class EMACrossoverStrategy(SignalProvider):
     Estrategia basada en cruces de EMA(20) y EMA(50).
     """
 
+
+    PARAMETROS = {
+        "time_stop": {"default": 80, "min": 1, "max": 300, "step": 1,
+                      "ayuda": "Máximo de velas en posición (válvula de seguridad)"},
+    }
+
     def check_entry(
         self,
         fifo: deque,
@@ -71,8 +77,8 @@ class EMACrossoverStrategy(SignalProvider):
         if not fifo:
             return "TIME_STOP"
 
-        # Válvula de seguridad de 80 velas
-        if candles_held >= 80:
+        # Válvula de seguridad
+        if candles_held >= self.p["time_stop"]:
             return "TIME_STOP"
 
         if len(fifo) < 2:

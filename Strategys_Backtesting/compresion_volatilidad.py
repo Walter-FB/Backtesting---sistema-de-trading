@@ -110,6 +110,22 @@ class CompresionVolatilidadStrategy(SignalProvider):
 
     # ── ENTRADA ───────────────────────────────────────────────────────────────
 
+
+    PARAMETROS = {
+        "atr_corto":        {"default": ATR_CORTO, "min": 3, "max": 30, "step": 1,
+                             "ayuda": "Período del ATR de volatilidad reciente"},
+        "atr_largo":        {"default": ATR_LARGO, "min": 10, "max": 200, "step": 1,
+                             "ayuda": "Período del ATR de volatilidad normal"},
+        "ratio_compresion": {"default": RATIO_COMPRESION, "min": 0.30, "max": 1.00, "step": 0.01,
+                             "ayuda": "Compresión = ATR corto / ATR largo por debajo de esto"},
+        "ruptura_velas":    {"default": RUPTURA_VELAS, "min": 5, "max": 100, "step": 1,
+                             "ayuda": "Entra si el cierre supera el máximo de estas velas"},
+        "chandelier_atr":   {"default": CHANDELIER_ATR, "min": 0.5, "max": 10.0, "step": 0.1,
+                             "ayuda": "Distancia del trailing stop, en ATR"},
+        "time_stop":        {"default": TIME_STOP_VELAS, "min": 1, "max": 300, "step": 1,
+                             "ayuda": "Máximo de velas en posición"},
+    }
+
     def check_entry(
         self,
         fifo: deque,
@@ -120,26 +136,26 @@ class CompresionVolatilidadStrategy(SignalProvider):
         Entra cuando un activo comprimido rompe al alza el máximo reciente.
         """
         # Necesitamos historia para el ATR largo, más la vela previa
-        if len(fifo) < ATR_LARGO + 2:
+        if len(fifo) < self.p["atr_largo"] + 2:
             return False
 
         actual = fifo[-1]
         previas = list(fifo)[:-1]   # el buffer SIN la vela de ruptura
 
         # ── Condición 1: veníamos comprimidos ─────────────────────────────────
-        atr_corto = atr(previas, period=ATR_CORTO)
-        atr_largo = atr(previas, period=ATR_LARGO)
+        atr_corto = atr(previas, period=self.p["atr_corto"])
+        atr_largo = atr(previas, period=self.p["atr_largo"])
 
         if atr_corto is None or atr_largo is None or atr_largo <= 0:
             return False
 
-        if (atr_corto / atr_largo) >= RATIO_COMPRESION:
+        if (atr_corto / atr_largo) >= self.p["ratio_compresion"]:
             return False
 
         # ── Condición 2: hoy rompe el máximo de las últimas N velas ───────────
         # Se excluye la vela actual del cálculo del máximo: si se incluyera,
         # su propio high formaría parte del techo a superar.
-        maximos = [c.high for c in list(fifo)[-(RUPTURA_VELAS + 1):-1]]
+        maximos = [c.high for c in list(fifo)[-(self.p["ruptura_velas"] + 1):-1]]
         if not maximos:
             return False
 
@@ -160,10 +176,10 @@ class CompresionVolatilidadStrategy(SignalProvider):
             return "TIME_STOP"
 
         # ── Válvula de seguridad ──────────────────────────────────────────────
-        if candles_held >= TIME_STOP_VELAS:
+        if candles_held >= self.p["time_stop"]:
             return "TIME_STOP"
 
-        nivel_stop = self._nivel_chandelier(fifo, candles_held)
+        nivel_stop = self._nivel_chandelier(fifo, candles_held, self.p["atr_corto"], self.p["chandelier_atr"])
         if nivel_stop is None:
             return None
 
@@ -175,7 +191,12 @@ class CompresionVolatilidadStrategy(SignalProvider):
     # ── Cálculo del trailing stop ─────────────────────────────────────────────
 
     @staticmethod
-    def _nivel_chandelier(fifo: deque, candles_held: int) -> Optional[float]:
+    def _nivel_chandelier(
+        fifo: deque,
+        candles_held: int,
+        atr_periodo: int = ATR_CORTO,
+        chandelier_atr: float = CHANDELIER_ATR,
+    ) -> Optional[float]:
         """
         Nivel del chandelier stop: el MÁS ALTO que alcanzó desde la entrada.
 
@@ -202,15 +223,15 @@ class CompresionVolatilidadStrategy(SignalProvider):
             max(c.high - c.low, abs(c.high - p.close), abs(c.low - p.close))
             for p, c in zip(velas, velas[1:])
         ]
-        if len(true_ranges) < ATR_CORTO:
+        if len(true_ranges) < atr_periodo:
             return None
 
         # ATR de Wilder vela por vela. El primer valor corresponde al índice
-        # ATR_CORTO de `velas` (necesita ATR_CORTO True Ranges previos).
-        atr_val = sum(true_ranges[:ATR_CORTO]) / ATR_CORTO
-        atr_por_vela = {ATR_CORTO: atr_val}
-        for idx, tr in enumerate(true_ranges[ATR_CORTO:], start=ATR_CORTO + 1):
-            atr_val = (atr_val * (ATR_CORTO - 1) + tr) / ATR_CORTO
+        # atr_periodo de `velas` (necesita atr_periodo True Ranges previos).
+        atr_val = sum(true_ranges[:atr_periodo]) / atr_periodo
+        atr_por_vela = {atr_periodo: atr_val}
+        for idx, tr in enumerate(true_ranges[atr_periodo:], start=atr_periodo + 1):
+            atr_val = (atr_val * (atr_periodo - 1) + tr) / atr_periodo
             atr_por_vela[idx] = atr_val
 
         # candles_held vale 1 en la vela de entrada (el motor lo incrementa
@@ -224,6 +245,6 @@ class CompresionVolatilidadStrategy(SignalProvider):
             atr_j = atr_por_vela.get(j)
             if atr_j is None:
                 continue   # vela anterior al calentamiento del ATR
-            nivel = max(nivel, maximo - CHANDELIER_ATR * atr_j)
+            nivel = max(nivel, maximo - chandelier_atr * atr_j)
 
         return None if nivel == float("-inf") else nivel

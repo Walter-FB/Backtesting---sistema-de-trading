@@ -1,24 +1,46 @@
 """
 signal_provider.py — Contrato de Proveedor de Señales (Patrón Strategy)
 ========================================================================
-Define la interfaz abstracta que todo proveedor de señales de trading
-debe cumplir para poder conectarse al TradingEngine.
+Define la interfaz abstracta que toda estrategia debe cumplir para poder
+conectarse al TradingEngine.
 
 Patrón de diseño: Strategy + Dependency Injection
   - SignalProvider define el CONTRATO (qué métodos debe tener).
-  - Cada implementación concreta (RSI2Strategy, EMACrossover, etc.)
-    provee su propia lógica sin que el engine sepa nada de ella.
-  - El TradingEngine recibe el proveedor inyectado en su __init__,
-    lo que lo hace intercambiable sin tocar una sola línea del motor.
+  - Cada implementación concreta provee su propia lógica sin que el engine
+    sepa nada de ella.
+  - El TradingEngine recibe la estrategia inyectada en su __init__, lo que
+    la hace intercambiable sin tocar una sola línea del motor.
 
-Cómo crear un nuevo proveedor de señales:
-  1. Crear un archivo nuevo (ej: ema_crossover.py)
-  2. Definir la clase heredando de SignalProvider:
-       class EMACrossover(SignalProvider):
-           def check_entry(self, fifo, regime, bullish_bias): ...
-           def check_exit(self, fifo, candles_held): ...
-  3. Pasarla al engine en tu runner:
-       engine = TradingEngine(strategy=EMACrossover(), initial_balance=...)
+Cómo crear una estrategia nueva
+--------------------------------
+  1. Copiá Strategys_Backtesting/_plantilla.py con otro nombre dentro de la
+     misma carpeta (ej. mi_estrategia.py).
+  2. Implementá check_entry y check_exit.
+  3. Listo. El sistema la descubre sola por el nombre del archivo — no hay
+     que registrarla en ningún lado.
+
+Parámetros ajustables
+----------------------
+Si querés que tu estrategia tenga perillas (un take profit, un umbral de
+RSI, lo que sea) que se puedan cambiar desde el dashboard o desde el
+código sin editar el archivo, declaralas en el atributo de clase
+PARAMETROS:
+
+    class MiEstrategia(SignalProvider):
+        PARAMETROS = {
+            "rsi_entrada": {"default": 30.0, "min": 5.0, "max": 50.0, "step": 1.0,
+                            "ayuda": "RSI por debajo del cual se compra"},
+            "time_stop":   {"default": 20,   "min": 1,   "max": 200,  "step": 1},
+        }
+
+        def check_entry(self, fifo, regime, bullish_bias):
+            if rsi(fifo, 14) < self.p["rsi_entrada"]:
+                ...
+
+Los valores quedan en `self.p`, ya mezclados con los que pase quien la
+instancie: MiEstrategia() usa los defaults, MiEstrategia(rsi_entrada=25)
+sobreescribe uno. Pasar un nombre que no está declarado es un error,
+para que un typo no se convierta en un parámetro que no hace nada.
 
 Regla de oro: ningún proveedor accede a datos futuros.
   check_entry y check_exit solo pueden leer fifo[-1] y datos históricos
@@ -29,7 +51,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections import deque
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from analysis import MarketRegime
 
@@ -42,7 +64,7 @@ class SignalProvider(ABC):
     --------------------
     check_entry(fifo, regime, bullish_bias) -> bool
         Evalúa si se debe abrir una posición Long al cierre de la vela actual.
-        La ejecución ocurre al open del día siguiente (responsabilidad del engine).
+        La ejecución ocurre al open de la vela siguiente (responsabilidad del engine).
 
     check_exit(fifo, candles_held) -> Optional[str]
         Evalúa si se debe cerrar la posición actualmente abierta.
@@ -56,11 +78,26 @@ class SignalProvider(ABC):
     - fifo[-1] es siempre la vela actual (la más reciente).
     """
 
+    # Declaración de parámetros ajustables. Vacío = la estrategia no tiene perillas.
+    PARAMETROS: Dict[str, Dict[str, Any]] = {}
+
+    def __init__(self, **overrides: Any) -> None:
+        desconocidos = set(overrides) - set(self.PARAMETROS)
+        if desconocidos:
+            raise ValueError(
+                f"{type(self).__name__} no declara los parámetros {sorted(desconocidos)}. "
+                f"Los que acepta son: {sorted(self.PARAMETROS) or 'ninguno'}"
+            )
+        self.p: Dict[str, Any] = {
+            nombre: spec["default"] for nombre, spec in self.PARAMETROS.items()
+        }
+        self.p.update(overrides)
+
     @abstractmethod
     def check_entry(
         self,
         fifo: deque,
-        regime: MarketRegime,
+        regime: Optional[MarketRegime],
         bullish_bias: Optional[bool],
     ) -> bool:
         """
@@ -69,17 +106,11 @@ class SignalProvider(ABC):
         Parámetros
         ----------
         fifo         : deque[Candle] — buffer FIFO (vela actual al final)
-        regime       : MarketRegime  — régimen de mercado actual
-        bullish_bias : Optional[bool]
-                       True  → precio > EMA200 (alcista)
-                       False → precio ≤ EMA200 (bajista)
-                       None  → EMA200 no disponible aún
+        regime       : clima clásico como Enum, o None si el pronóstico activo
+                       no usa el vocabulario clásico
+        bullish_bias : True → precio > EMA200 | False → precio ≤ EMA200 | None → sin dato
 
-        Retorna
-        -------
-        bool
-            True  → abrir posición al open de la vela siguiente
-            False → no hay señal de entrada
+        Retorna True para abrir posición al open de la vela siguiente.
         """
         ...
 
@@ -95,11 +126,9 @@ class SignalProvider(ABC):
         Parámetros
         ----------
         fifo         : deque[Candle] — buffer FIFO (vela actual al final)
-        candles_held : int — cantidad de velas desde la entrada
+        candles_held : velas transcurridas desde la entrada (vale 1 en la vela de entrada)
 
-        Retorna
-        -------
-        str  → razón de salida (ej: "RSI_TARGET", "TIME_STOP", "EMA_CROSS")
-        None → mantener la posición abierta
+        Retorna la razón de salida (ej: "TAKE_PROFIT", "TIME_STOP") o None para mantener.
+        El texto aparece agrupado en los reportes: usá nombres que sirvan para diagnosticar.
         """
         ...

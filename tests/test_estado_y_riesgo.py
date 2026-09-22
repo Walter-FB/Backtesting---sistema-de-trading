@@ -42,7 +42,7 @@ from strategy_factory import StrategyFactory
 from Strategys_Backtesting.compresion_volatilidad import (
     CompresionVolatilidadStrategy, ATR_CORTO,
 )
-from Strategys_Backtesting.connors_rsi2 import RiskManager
+from risk_manager import RiskManager
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIA = 86_400
