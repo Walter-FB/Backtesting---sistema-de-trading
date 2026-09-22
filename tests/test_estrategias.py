@@ -21,6 +21,7 @@ Se corre sin pytest:
 
 from __future__ import annotations
 
+import logging
 import contextlib
 import io
 import os
@@ -166,4 +167,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.disable(logging.CRITICAL)   # los tests hablan con ✓, no con el log del engine
     main()

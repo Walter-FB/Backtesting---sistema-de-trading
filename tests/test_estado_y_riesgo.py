@@ -212,7 +212,7 @@ def test_json_ilegible_falla_fuerte() -> None:
         finally:
             os.unlink(ruta)
     finally:
-        logging.disable(logging.NOTSET)
+        logging.disable(logging.CRITICAL)
     print("✓ un JSON ilegible falla fuerte en vez de devolver una lista vacía")
 
 
@@ -229,4 +229,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.disable(logging.CRITICAL)   # los tests hablan con ✓, no con el log del engine
     main()
